@@ -1,6 +1,6 @@
 use std::net::SocketAddr;
 
-use wasm_test_server::{run, bind_socket};
+use wasm_test_server::server::{run, bind_socket};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {

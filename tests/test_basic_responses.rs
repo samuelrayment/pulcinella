@@ -1,13 +1,13 @@
 use std::net::SocketAddr;
 
-use wasm_test_server::bind_socket;
+use wasm_test_server::server::{run, bind_socket};
 
 #[tokio::test]
 async fn should_respond_with_404_for_non_existent_path() {
     let (port, listener) = bind_socket(SocketAddr::from(([127, 0, 0, 1], 0)))
         .await
         .unwrap();
-    let server = wasm_test_server::run(listener);
+    let server = run(listener);
     let _ = tokio::spawn(server);
 
     let client = reqwest::Client::new();
