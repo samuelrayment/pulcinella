@@ -1,6 +1,6 @@
 use std::{collections::HashMap, convert::Infallible, net::SocketAddr, sync::Arc};
 
-use http_body_util::{BodyExt, Full, Empty};
+use http_body_util::{BodyExt, Empty, Full};
 use hyper::{
     body::{Body, Bytes},
     server::conn::http1,
@@ -48,6 +48,8 @@ where
     let url = host_header.to_str().unwrap().parse::<hyper::Uri>().unwrap();
     let host = url.host().expect("uri has no host");
     let port = url.port_u16().unwrap_or(80);
+    let request_headers = req.headers().clone();
+    println!("body: {:?}", req.into_body().collect().await.unwrap().to_bytes());
     let address = format!("{}:{}", host, port);
     let stream = TcpStream::connect(address).await.unwrap();
     let io = TokioIo::new(stream);
@@ -61,17 +63,27 @@ where
     });
 
     let authority = url.authority().unwrap().clone();
-    let req = Request::builder()
+    let mut builder = Request::builder()
         .uri(url)
-        .header(hyper::header::HOST, authority.as_str())
-        .body(Empty::<Bytes>::new()).unwrap();
+        .header(hyper::header::HOST, authority.as_str());
+    let headers = builder.headers_mut().unwrap();
+    *headers = request_headers;
+    let req = builder
+        .body(Empty::<Bytes>::new())
+        .unwrap();
+    println!("request: {:?}", req);
     let res = sender.send_request(req).await.unwrap();
     let res_status = res.status();
+    let res_headers = res.headers().clone();
     let bytes = res.into_body().collect().await.unwrap().to_bytes();
-    Ok(Response::builder()
-        .status(res_status)
-        .body(Full::new(bytes))
-        .unwrap())
+
+    let mut builder = Response::builder().status(res_status);
+    let headers_map = builder.headers_mut().unwrap();
+    *headers_map = res_headers;
+    let response = builder.body(Full::new(bytes)).unwrap();
+    println!("response: {:?}", response);
+
+    Ok(response)
 }
 
 async fn handle_control_plane<T>(

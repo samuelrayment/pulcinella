@@ -17,6 +17,9 @@ thiserror = "1.0.51"
 tokio = { version = "1", features = ["full"] }
 uuid7 = "0.7.2"
 
+[dev-dependencies]
+fake = "2.9.1"
+
 [[bin]]
 name = "server"
 test = false
