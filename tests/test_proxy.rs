@@ -1,5 +1,5 @@
 use fake::{faker, Faker, Fake};
-use http_body_util::Full;
+use http_body_util::{Full, BodyExt};
 use hyper::{
     body::{Body, Bytes, Incoming},
     server::conn::http1,
@@ -19,7 +19,7 @@ use wasm_test_server::{
 #[tokio::test]
 async fn should_proxy_through_to_real_server() {
     let server_port = start_server().await;
-    let proxy_port = start_proxied_server(vec![]).await;
+    let proxy_port = start_proxied_server(ProxyExpectations::default()).await;
     let client = create_client(server_port);
 
     let response = client
@@ -44,12 +44,39 @@ async fn should_proxy_through_headers_to_real_server() {
     let header_name = Faker.fake::<String>();
     let header_value = Faker.fake::<String>();
     let server_port = start_server().await;
-    let proxy_port = start_proxied_server(vec![(header_name.clone(), header_value.clone())]).await;
+    let proxy_port = start_proxied_server(ProxyExpectations {
+        expected_headers: vec![(header_name.clone(), header_value.clone())],
+        ..Default::default()
+    }).await;
     let client = create_client(server_port);
 
     let response = client
         .get(&format!("http://localhost:{}/", proxy_port))
         .header(header_name.clone(), header_value.clone())
+        .send()
+        .await
+        .expect("Failed to send request");
+    let response_status = response.status();
+    let body = response.text().await.unwrap();
+
+    assert_eq!(200, response_status);
+    assert_eq!("hello", body);
+}
+
+#[tokio::test]
+async fn should_proxy_through_post_and_body() {
+    let body = Faker.fake::<String>();
+    let server_port = start_server().await;
+    let proxy_port = start_proxied_server(ProxyExpectations {
+        expected_body: Some(body.clone()),
+        expected_method: Some("POST".to_string()),
+        ..Default::default()
+    }).await;
+    let client = create_client(server_port);
+
+    let response = client
+        .post(&format!("http://localhost:{}/", proxy_port))
+        .body(body.clone())
         .send()
         .await
         .expect("Failed to send request");
@@ -75,11 +102,11 @@ async fn start_server() -> u16 {
     port
 }
 
-async fn start_proxied_server(expected_headers: Vec<(String, String)>) -> u16 {
+async fn start_proxied_server(expectations: ProxyExpectations) -> u16 {
     let (port, listener) = bind_socket(SocketAddr::from(([127, 0, 0, 1], 0)))
         .await
         .unwrap();
-    let server = run_proxied(listener, expected_headers);
+    let server = run_proxied(listener, expectations);
     let _ = tokio::spawn(server);
 
     port
@@ -87,16 +114,16 @@ async fn start_proxied_server(expected_headers: Vec<(String, String)>) -> u16 {
 
 async fn run_proxied(
     listener: TcpListener,
-    expected_headers: Vec<(String, String)>,
+    expectations: ProxyExpectations,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     loop {
-        let expected_headers = expected_headers.clone();
+        let expectations = expectations.clone();
         let (stream, _) = listener.accept().await?;
         let io = TokioIo::new(stream);
 
         tokio::task::spawn(async move {
             if let Err(err) = http1::Builder::new()
-                .serve_connection(io, service_fn(move |req| proxied_handler(req, expected_headers.clone())))
+                .serve_connection(io, service_fn(move |req| proxied_handler(req, expectations.clone())))
                 .await
             {
                 println!("Error serving connection: {:?}", err);
@@ -105,13 +132,32 @@ async fn run_proxied(
     }
 }
 
-async fn proxied_handler(req: Request<Incoming>, expected_headers: Vec<(String, String)>) -> Result<Response<Full<Bytes>>, Infallible> {
+async fn proxied_handler(req: Request<Incoming>, expectations: ProxyExpectations) -> Result<Response<Full<Bytes>>, Infallible> {
     let request_headers = req.headers();
-    for (header_name, header_value) in expected_headers {
+    for (header_name, header_value) in expectations.expected_headers {
         if request_headers.get(header_name).and_then(|i| i.to_str().ok()) != Some(&header_value) {
             return Ok(Response::builder()
                 .status(400)
                 .body(Full::new(Bytes::from_static(b"bad header")))
+                .unwrap());
+        }
+    }
+
+    if let Some(expected_method) = expectations.expected_method {
+        if req.method().as_str() != expected_method {
+            return Ok(Response::builder()
+                .status(400)
+                .body(Full::new(Bytes::from_static(b"bad method")))
+                .unwrap());
+        }
+    }
+
+    if let Some(expected_body) = expectations.expected_body {
+        let body = req.into_body().collect().await.unwrap().to_bytes();
+        if body != expected_body {
+            return Ok(Response::builder()
+                .status(400)
+                .body(Full::new(Bytes::from_static(b"bad body")))
                 .unwrap());
         }
     }
@@ -121,4 +167,11 @@ async fn proxied_handler(req: Request<Incoming>, expected_headers: Vec<(String, 
         .header("extra-header", "extra-value")
         .body(Full::new(Bytes::from_static(b"hello")))
         .unwrap())
+}
+
+#[derive(Clone, Default)]
+struct ProxyExpectations {
+    expected_headers: Vec<(String, String)>,
+    expected_body: Option<String>,
+    expected_method: Option<String>,
 }

@@ -41,6 +41,7 @@ where
     T: Body,
     T::Error: std::fmt::Debug,
 {
+    let req_method = req.method().to_string();
     println!("method: {:?}", req.method());
     println!("path: {}", req.uri().path());
     println!("headers: {:?}", req.headers());
@@ -49,8 +50,10 @@ where
     let host = url.host().expect("uri has no host");
     let port = url.port_u16().unwrap_or(80);
     let request_headers = req.headers().clone();
-    println!("body: {:?}", req.into_body().collect().await.unwrap().to_bytes());
+    let body = req.into_body().collect().await.unwrap().to_bytes();
+
     let address = format!("{}:{}", host, port);
+    println!("address: {}", address);
     let stream = TcpStream::connect(address).await.unwrap();
     let io = TokioIo::new(stream);
     let (mut sender, conn) = hyper::client::conn::http1::handshake(io).await.unwrap();
@@ -62,17 +65,15 @@ where
         }
     });
 
-    let authority = url.authority().unwrap().clone();
-    let mut builder = Request::builder()
-        .uri(url)
-        .header(hyper::header::HOST, authority.as_str());
+    let method = hyper::Method::from_bytes(req_method.as_bytes()).unwrap();
+    let mut builder = Request::builder().method(method).uri(url);
     let headers = builder.headers_mut().unwrap();
     *headers = request_headers;
-    let req = builder
-        .body(Empty::<Bytes>::new())
+    let proxied_req = builder
+        .body(Full::new(body))
         .unwrap();
-    println!("request: {:?}", req);
-    let res = sender.send_request(req).await.unwrap();
+    println!("request: {:?}", proxied_req);
+    let res = sender.send_request(proxied_req).await.unwrap();
     let res_status = res.status();
     let res_headers = res.headers().clone();
     let bytes = res.into_body().collect().await.unwrap().to_bytes();
