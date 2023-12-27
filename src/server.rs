@@ -41,10 +41,17 @@ where
     T: Body,
     T::Error: std::fmt::Debug,
 {
-    let req_method = req.method().to_string();
-    println!("method: {:?}", req.method());
-    println!("path: {}", req.uri().path());
-    println!("headers: {:?}", req.headers());
+    let res = request_from_proxy(req).await;
+    proxy_response_to_response(res).await
+}
+
+async fn request_from_proxy<T>(req: Request<T>) -> Response<hyper::body::Incoming>
+where
+    T: Body,
+    T::Error: std::fmt::Debug,
+{
+    let req_method = req.method().as_str().as_bytes();
+    let method = hyper::Method::from_bytes(req_method).unwrap();
     let host_header = req.headers().get("host").unwrap();
     let url = host_header.to_str().unwrap().parse::<hyper::Uri>().unwrap();
     let host = url.host().expect("uri has no host");
@@ -53,7 +60,6 @@ where
     let body = req.into_body().collect().await.unwrap().to_bytes();
 
     let address = format!("{}:{}", host, port);
-    println!("address: {}", address);
     let stream = TcpStream::connect(address).await.unwrap();
     let io = TokioIo::new(stream);
     let (mut sender, conn) = hyper::client::conn::http1::handshake(io).await.unwrap();
@@ -65,15 +71,17 @@ where
         }
     });
 
-    let method = hyper::Method::from_bytes(req_method.as_bytes()).unwrap();
     let mut builder = Request::builder().method(method).uri(url);
     let headers = builder.headers_mut().unwrap();
     *headers = request_headers;
     let proxied_req = builder
         .body(Full::new(body))
         .unwrap();
-    println!("request: {:?}", proxied_req);
     let res = sender.send_request(proxied_req).await.unwrap();
+    res
+}
+
+async fn proxy_response_to_response(res: Response<hyper::body::Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
     let res_status = res.status();
     let res_headers = res.headers().clone();
     let bytes = res.into_body().collect().await.unwrap().to_bytes();
@@ -82,7 +90,6 @@ where
     let headers_map = builder.headers_mut().unwrap();
     *headers_map = res_headers;
     let response = builder.body(Full::new(bytes)).unwrap();
-    println!("response: {:?}", response);
 
     Ok(response)
 }

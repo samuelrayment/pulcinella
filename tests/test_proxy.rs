@@ -1,20 +1,17 @@
-use fake::{faker, Fake, Faker};
+use fake::{Fake, Faker};
 use http_body_util::{BodyExt, Full};
 use hyper::{
-    body::{Body, Bytes, Incoming},
+    body::{Bytes, Incoming},
     server::conn::http1,
     service::service_fn,
     Request, Response,
 };
 use hyper_util::rt::TokioIo;
 use reqwest::header::HeaderValue;
-use std::{collections::HashMap, convert::Infallible, net::SocketAddr, sync::Arc};
-use tokio::{net::TcpListener, sync::RwLock};
+use std::{convert::Infallible, net::SocketAddr};
+use tokio::net::TcpListener;
 
-use wasm_test_server::{
-    client::Client,
-    server::{bind_socket, run, Mode},
-};
+use wasm_test_server::server::{bind_socket, run, Mode};
 
 #[tokio::test]
 async fn should_proxy_through_to_real_server() {
@@ -36,18 +33,15 @@ async fn should_proxy_through_to_real_server() {
         .send()
         .await
         .expect("Failed to send request");
-    let response_status = response.status();
-    let response_headers = response.headers().clone();
-    let body = response.text().await.unwrap();
 
-    assert_eq!(200, response_status);
-    assert_eq!("hello", body);
     assert_eq!(
         Some(header_value.as_str()),
-        response_headers
+        response.headers()
             .get(header_name)
             .and_then(|i: &HeaderValue| i.to_str().ok())
     );
+    assert_eq!(200, response.status());
+    assert_eq!("hello", response.text().await.unwrap());
 }
 
 #[tokio::test]
@@ -71,11 +65,9 @@ async fn should_proxy_through_headers_to_real_server() {
         .send()
         .await
         .expect("Failed to send request");
-    let response_status = response.status();
-    let body = response.text().await.unwrap();
 
-    assert_eq!(200, response_status);
-    assert_eq!("hello", body);
+    assert_eq!(200, response.status());
+    assert_eq!("hello", response.text().await.unwrap());
 }
 
 #[tokio::test]
@@ -99,11 +91,9 @@ async fn should_proxy_through_post_and_body() {
         .send()
         .await
         .expect("Failed to send request");
-    let response_status = response.status();
-    let body = response.text().await.unwrap();
 
-    assert_eq!(200, response_status);
-    assert_eq!("hello", body);
+    assert_eq!(200, response.status());
+    assert_eq!("hello", response.text().await.unwrap());
 }
 
 fn create_client(server_port: u16) -> reqwest::Client {
