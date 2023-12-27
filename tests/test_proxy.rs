@@ -23,7 +23,7 @@ async fn should_proxy_through_to_real_server() {
         ProxyResponseOptions {
             headers: vec![(header_name.clone(), header_value.clone())],
             ..Default::default()
-        }
+        },
     )
     .await;
     let client = create_client(server_port);
@@ -36,7 +36,8 @@ async fn should_proxy_through_to_real_server() {
 
     assert_eq!(
         Some(header_value.as_str()),
-        response.headers()
+        response
+            .headers()
             .get(header_name)
             .and_then(|i: &HeaderValue| i.to_str().ok())
     );
@@ -94,6 +95,47 @@ async fn should_proxy_through_post_and_body() {
 
     assert_eq!(200, response.status());
     assert_eq!("hello", response.text().await.unwrap());
+}
+
+#[tokio::test]
+async fn should_respond_with_bad_request_if_host_header_not_correctly_formed() {
+    let server_port = start_server().await;
+    let proxy_port = start_proxied_server(
+        ProxyExpectations::default(),
+        ProxyResponseOptions::default(),
+    )
+    .await;
+    let client = create_client(server_port);
+
+    let response = client
+        .post(&format!("http://localhost:{}/", proxy_port))
+        .header("host", "not a url")
+        .send()
+        .await
+        .expect("Failed to send request");
+
+    assert_eq!(400, response.status());
+    assert_eq!("Bad host header", response.text().await.unwrap());
+}
+
+#[tokio::test]
+async fn should_respond_with_upstream_not_found_if_server_not_available() {
+    let server_port = start_server().await;
+    let _proxy_port = start_proxied_server(
+        ProxyExpectations::default(),
+        ProxyResponseOptions::default(),
+    )
+    .await;
+    let client = create_client(server_port);
+
+    let response = client
+        .post(&format!("http://localhost:{}/", 1))
+        .send()
+        .await
+        .expect("Failed to send request");
+
+    assert_eq!(502, response.status());
+    assert_eq!("Upstream not found", response.text().await.unwrap());
 }
 
 fn create_client(server_port: u16) -> reqwest::Client {

@@ -8,6 +8,7 @@ use hyper::{
     Request, Response,
 };
 use hyper_util::rt::TokioIo;
+use thiserror::Error;
 use tokio::{
     net::{TcpListener, TcpStream},
     sync::RwLock,
@@ -41,28 +42,40 @@ where
     T: Body,
     T::Error: std::fmt::Debug,
 {
-    let res = request_from_proxy(req).await;
-    proxy_response_to_response(res).await
+    match request_from_proxy(req).await {
+        Ok(res) => proxy_response_to_response(res)
+            .await
+            .or_else(|e| e.to_response()),
+        Err(e) => e.to_response(),
+    }
 }
 
-async fn request_from_proxy<T>(req: Request<T>) -> Response<hyper::body::Incoming>
+async fn request_from_proxy<T>(
+    req: Request<T>,
+) -> Result<Response<hyper::body::Incoming>, ProxyError>
 where
     T: Body,
     T::Error: std::fmt::Debug,
 {
-    let req_method = req.method().as_str().as_bytes();
-    let method = hyper::Method::from_bytes(req_method).unwrap();
-    let host_header = req.headers().get("host").unwrap();
-    let url = host_header.to_str().unwrap().parse::<hyper::Uri>().unwrap();
-    let host = url.host().expect("uri has no host");
-    let port = url.port_u16().unwrap_or(80);
-    let request_headers = req.headers().clone();
-    let body = req.into_body().collect().await.unwrap().to_bytes();
+    let method = req.method().clone();
 
+    let url = req
+        .headers()
+        .get("host")
+        .and_then(|host| host.to_str().ok()?.parse::<hyper::Uri>().ok())
+        .ok_or(ProxyError::BadHostHeader)?;
+
+    let host = url.host().ok_or(ProxyError::BadHostHeader)?;
+    let port = url.port_u16().unwrap_or(80);
     let address = format!("{}:{}", host, port);
-    let stream = TcpStream::connect(address).await.unwrap();
+
+    let stream = TcpStream::connect(address)
+        .await
+        .map_err(|_| ProxyError::UpstreamNotFound)?;
     let io = TokioIo::new(stream);
-    let (mut sender, conn) = hyper::client::conn::http1::handshake(io).await.unwrap();
+    let (mut sender, conn) = hyper::client::conn::http1::handshake(io)
+        .await
+        .map_err(|_| ProxyError::UpstreamNotHttp)?;
 
     // Spawn a task to poll the connection, driving the HTTP state
     tokio::task::spawn(async move {
@@ -72,24 +85,95 @@ where
     });
 
     let mut builder = Request::builder().method(method).uri(url);
-    let headers = builder.headers_mut().unwrap();
-    *headers = request_headers;
+    let request_headers = req.headers().clone();
+    let body = req
+        .into_body()
+        .collect()
+        .await
+        .map_err(|_| ProxyError::CannotReadRequestBody)?
+        .to_bytes();
+
+    if let Some(headers) = builder.headers_mut() {
+        *headers = request_headers;
+    }
     let proxied_req = builder
         .body(Full::new(body))
-        .unwrap();
-    let res = sender.send_request(proxied_req).await.unwrap();
-    res
+        .map_err(|_| ProxyError::CannotReadRequestBody)?;
+
+    let res = sender
+        .send_request(proxied_req)
+        .await
+        .map_err(|_| ProxyError::UpstreamSendError)?;
+    Ok(res)
 }
 
-async fn proxy_response_to_response(res: Response<hyper::body::Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
+#[derive(Debug, Error)]
+enum ProxyError {
+    #[error("Bad host header")]
+    BadHostHeader,
+    #[error("Upstream not found")]
+    UpstreamNotFound,
+    #[error("Upstream does not support HTTP")]
+    UpstreamNotHttp,
+    #[error("Cannot read request body")]
+    CannotReadRequestBody,
+    #[error("Upstream send error")]
+    UpstreamSendError,
+    #[error("Cannot read response body")]
+    CannotReadResponseBody,
+    #[error("Cannot construct response body")]
+    CannotConstructResponseBody,
+}
+
+impl ProxyError {
+    fn to_response(&self) -> Result<Response<Full<Bytes>>, Infallible> {
+        match self {
+            ProxyError::BadHostHeader => Self::generate_response(400, "Bad host header"),
+            ProxyError::UpstreamNotFound => Self::generate_response(502, "Upstream not found"),
+            ProxyError::UpstreamNotHttp => Self::generate_response(502, "Upstream not HTTP"),
+            ProxyError::CannotReadRequestBody => {
+                Self::generate_response(502, "Cannot read request body")
+            }
+            ProxyError::UpstreamSendError => Self::generate_response(502, "Upstream send error"),
+            ProxyError::CannotReadResponseBody => {
+                Self::generate_response(502, "Cannot read response body")
+            }
+            ProxyError::CannotConstructResponseBody => {
+                Self::generate_response(502, "Cannot construct response body")
+            }
+        }
+    }
+
+    fn generate_response(
+        status: u16,
+        message: &'static str,
+    ) -> Result<Response<Full<Bytes>>, Infallible> {
+        Ok(Response::builder()
+            .status(status)
+            .body(Full::new(Bytes::from(message)))
+            .unwrap())
+    }
+}
+
+async fn proxy_response_to_response(
+    res: Response<hyper::body::Incoming>,
+) -> Result<Response<Full<Bytes>>, ProxyError> {
     let res_status = res.status();
     let res_headers = res.headers().clone();
-    let bytes = res.into_body().collect().await.unwrap().to_bytes();
+    let bytes = res
+        .into_body()
+        .collect()
+        .await
+        .map_err(|_| ProxyError::CannotReadResponseBody)?
+        .to_bytes();
 
     let mut builder = Response::builder().status(res_status);
-    let headers_map = builder.headers_mut().unwrap();
-    *headers_map = res_headers;
-    let response = builder.body(Full::new(bytes)).unwrap();
+    if let Some(headers_map) = builder.headers_mut() {
+        *headers_map = res_headers;
+    }
+    let response = builder.body(Full::new(bytes)).map_err(|_| {
+        ProxyError::CannotConstructResponseBody
+    })?;
 
     Ok(response)
 }
