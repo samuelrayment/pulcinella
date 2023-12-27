@@ -22,7 +22,7 @@ pub async fn handler<T>(
     mode: Mode,
 ) -> Result<Response<Full<Bytes>>, Infallible>
 where
-    T: Body,
+    T: Body + std::fmt::Debug,
     T::Error: std::fmt::Debug,
 {
     match (req.method(), req.uri().path()) {
@@ -39,7 +39,7 @@ where
 
 async fn proxy_handler<T>(req: Request<T>) -> Result<Response<Full<Bytes>>, Infallible>
 where
-    T: Body,
+    T: Body + std::fmt::Debug,
     T::Error: std::fmt::Debug,
 {
     match request_from_proxy(req).await {
@@ -54,9 +54,10 @@ async fn request_from_proxy<T>(
     req: Request<T>,
 ) -> Result<Response<hyper::body::Incoming>, ProxyError>
 where
-    T: Body,
+    T: Body + std::fmt::Debug,
     T::Error: std::fmt::Debug,
 {
+    println!("Request: {:?}", req);
     let method = req.method().clone();
 
     let url = req
@@ -84,7 +85,7 @@ where
         }
     });
 
-    let mut builder = Request::builder().method(method).uri(url);
+    let mut builder = Request::builder().method(method).uri(req.uri().path());
     let request_headers = req.headers().clone();
     let body = req
         .into_body()

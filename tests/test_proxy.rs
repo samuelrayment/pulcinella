@@ -138,6 +138,31 @@ async fn should_respond_with_upstream_not_found_if_server_not_available() {
     assert_eq!("Upstream not found", response.text().await.unwrap());
 }
 
+#[tokio::test]
+async fn should_respond_with_upstream_for_different_path() {
+    let path = Faker.fake::<String>();
+    let server_port = start_server().await;
+    let proxy_port = start_proxied_server(
+        ProxyExpectations {
+            expected_path: Some(format!("/{}", path)),
+            ..Default::default()
+        },
+        ProxyResponseOptions::default(),
+    )
+    .await;
+    let client = create_client(server_port);
+
+    let response = client
+        .post(&format!("http://localhost:{}/{}", proxy_port, path))
+        .send()
+        .await
+        .expect("Failed to send request");
+
+    assert_eq!(200, response.status());
+    assert_eq!("hello", response.text().await.unwrap());
+}
+
+
 fn create_client(server_port: u16) -> reqwest::Client {
     let proxy = reqwest::Proxy::http(&format!("http://localhost:{}/", server_port)).unwrap();
     let client = reqwest::ClientBuilder::new().proxy(proxy).build().unwrap();
@@ -215,6 +240,12 @@ async fn proxied_handler(
         }
     }
 
+    if let Some(expected_path) = expectations.expected_path {
+        if req.uri().path() != expected_path {
+            return error_response("bad path");
+        }
+    }
+
     if let Some(expected_body) = expectations.expected_body {
         let body = req.into_body().collect().await.unwrap().to_bytes();
         if body != expected_body {
@@ -246,6 +277,7 @@ struct ProxyExpectations {
     expected_headers: Vec<(String, String)>,
     expected_body: Option<String>,
     expected_method: Option<String>,
+    expected_path: Option<String>,
 }
 
 #[derive(Clone, Default)]
