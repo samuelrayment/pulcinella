@@ -13,11 +13,13 @@ use tokio::net::TcpListener;
 
 use wasm_test_server::server::{bind_socket, run, Mode};
 
+use crate::helpers::start_server;
+
 #[tokio::test]
 async fn should_proxy_through_to_real_server() {
     let header_name = Faker.fake::<String>();
     let header_value = Faker.fake::<String>();
-    let server_port = start_server().await;
+    let server_port = start_server(Mode::Proxy).await;
     let proxy_port = start_proxied_server(
         ProxyExpectations::default(),
         ProxyResponseOptions {
@@ -49,7 +51,7 @@ async fn should_proxy_through_to_real_server() {
 async fn should_proxy_through_headers_to_real_server() {
     let header_name = Faker.fake::<String>();
     let header_value = Faker.fake::<String>();
-    let server_port = start_server().await;
+    let server_port = start_server(Mode::Proxy).await;
     let proxy_port = start_proxied_server(
         ProxyExpectations {
             expected_headers: vec![(header_name.clone(), header_value.clone())],
@@ -74,7 +76,7 @@ async fn should_proxy_through_headers_to_real_server() {
 #[tokio::test]
 async fn should_proxy_through_post_and_body() {
     let body = Faker.fake::<String>();
-    let server_port = start_server().await;
+    let server_port = start_server(Mode::Proxy).await;
     let proxy_port = start_proxied_server(
         ProxyExpectations {
             expected_body: Some(body.clone()),
@@ -99,7 +101,7 @@ async fn should_proxy_through_post_and_body() {
 
 #[tokio::test]
 async fn should_respond_with_bad_request_if_host_header_not_correctly_formed() {
-    let server_port = start_server().await;
+    let server_port = start_server(Mode::Proxy).await;
     let proxy_port = start_proxied_server(
         ProxyExpectations::default(),
         ProxyResponseOptions::default(),
@@ -120,7 +122,7 @@ async fn should_respond_with_bad_request_if_host_header_not_correctly_formed() {
 
 #[tokio::test]
 async fn should_respond_with_upstream_not_found_if_server_not_available() {
-    let server_port = start_server().await;
+    let server_port = start_server(Mode::Proxy).await;
     let _proxy_port = start_proxied_server(
         ProxyExpectations::default(),
         ProxyResponseOptions::default(),
@@ -141,7 +143,7 @@ async fn should_respond_with_upstream_not_found_if_server_not_available() {
 #[tokio::test]
 async fn should_respond_with_upstream_for_different_path() {
     let path = Faker.fake::<String>();
-    let server_port = start_server().await;
+    let server_port = start_server(Mode::Proxy).await;
     let proxy_port = start_proxied_server(
         ProxyExpectations {
             expected_path: Some(format!("/{}", path)),
@@ -167,15 +169,6 @@ fn create_client(server_port: u16) -> reqwest::Client {
     let proxy = reqwest::Proxy::http(&format!("http://localhost:{}/", server_port)).unwrap();
     let client = reqwest::ClientBuilder::new().proxy(proxy).build().unwrap();
     client
-}
-
-async fn start_server() -> u16 {
-    let (port, listener) = bind_socket(SocketAddr::from(([127, 0, 0, 1], 0)))
-        .await
-        .unwrap();
-    let server = run(listener, Mode::Proxy);
-    let _ = tokio::spawn(server);
-    port
 }
 
 async fn start_proxied_server(

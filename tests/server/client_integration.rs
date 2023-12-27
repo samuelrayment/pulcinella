@@ -5,9 +5,11 @@ use wasm_test_server::{
     server::{bind_socket, run, Mode},
 };
 
+use crate::helpers::start_server;
+
 #[tokio::test]
 async fn should_respond_with_404_for_non_existent_path() {
-    let port = start_server().await;
+    let port = start_server(Mode::Mock).await;
 
     let client = reqwest::Client::new();
     let response = client
@@ -40,12 +42,3 @@ async fn should_respond_with_404_for_non_existent_path() {
 //
 //    assert_eq!(client.status(), 200);
 //}
-
-async fn start_server() -> u16 {
-    let (port, listener) = bind_socket(SocketAddr::from(([127, 0, 0, 1], 0)))
-        .await
-        .unwrap();
-    let server = run(listener, Mode::Mock);
-    let _ = tokio::spawn(server);
-    port
-}
