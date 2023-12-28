@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 
 use tokio::join;
-use wasm_test_server::server::{run_controlplane, bind_socket, Mode, State, run_mock};
+use wasm_test_server::server::{run_controlplane, bind_socket, Mode, SequentialState, run_mock};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -11,7 +11,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let mock = bind_socket(mock_addr).await?;
     let control_plane = bind_socket(control_plane_addr).await?;
-    let state = State::new(mock.port);
+    let state = SequentialState::new(mock.port);
 
     println!("Control Plane on http://127.0.0.1:{}/", control_plane.port);
     println!("Mock on http://127.0.0.1:{}/", mock.port);

@@ -1,6 +1,6 @@
 use std::net::SocketAddr;
 
-use wasm_test_server::server::{bind_socket, run_controlplane, Mode, run_mock, State};
+use wasm_test_server::server::{bind_socket, run_controlplane, Mode, run_mock, SequentialState};
 
 pub(crate) struct ServerPorts {
     pub(crate) control_plane: u16,
@@ -15,7 +15,7 @@ pub(crate) async fn start_server(mode: Mode) -> ServerPorts {
         .await
         .unwrap();
 
-    let state = State::new(mock.port);
+    let state = SequentialState::new(mock.port);
     let control_plane_server = run_controlplane(control_plane.listener, state.clone(), mode);
     let _ = tokio::spawn(control_plane_server);
 

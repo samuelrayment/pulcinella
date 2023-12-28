@@ -14,11 +14,11 @@ use tokio::{
     sync::RwLock,
 };
 
-use crate::interchange::{Command, InstanceId, InstanceResponse};
+use crate::interchange::{Command, InstanceId, InstanceResponse, Mock};
 
 pub async fn handler<T>(
     req: Request<T>,
-    state: State,
+    state: SequentialState,
 ) -> Result<Response<Full<Bytes>>, Infallible>
 where
     T: Body + std::fmt::Debug,
@@ -33,11 +33,27 @@ where
     }
 }
 
-async fn mock_handler<T>(req: Request<T>, mode: Mode) -> Result<Response<Full<Bytes>>, Infallible>
+async fn mock_handler<T>(
+    req: Request<T>,
+    state: SequentialState,
+    mode: Mode,
+) -> Result<Response<Full<Bytes>>, Infallible>
 where
     T: Body + std::fmt::Debug,
     T::Error: std::fmt::Debug,
 {
+    let instance = state.instance.read().await;
+    if let Some((_, mocks)) = instance.as_ref() {
+        for mock in mocks {
+            if mock.matches(&req) {
+                return Ok(Response::builder()
+                    .status(200)
+                    .body(Full::new(Bytes::from_static(b"---")))
+                    .unwrap());
+            }
+        }
+    }
+
     match mode {
         Mode::Proxy => match request_from_proxy(req).await {
             Ok(res) => proxy_response_to_response(res)
@@ -183,7 +199,7 @@ async fn proxy_response_to_response(
 
 async fn handle_control_plane<T>(
     req: Request<T>,
-    state: State,
+    state: SequentialState,
 ) -> Result<Response<Full<Bytes>>, Infallible>
 where
     T: Body,
@@ -193,14 +209,14 @@ where
     let command = serde_json::from_slice::<Command>(&body).unwrap();
     match command {
         Command::CreateInstance => {
-            let instance = Instance {};
-            let instance_id = uuid7::uuid7().to_string();
+            let instance_id = InstanceId(uuid7::uuid7().to_string());
             {
-                let mut instances = state.instances.write().await;
-                instances.insert(instance_id.clone(), instance);
+                let mut instance = state.instance.write().await;
+                *instance = Some((instance_id.clone(), vec![]));
             }
             let instance_response = InstanceResponse {
-                instance: InstanceId(instance_id),
+                instance: instance_id,
+                url: format!("http://localhost:{}", state.mock_port),
             };
             Ok(Response::builder()
                 .status(200)
@@ -209,7 +225,16 @@ where
                 )))
                 .unwrap())
         }
-        Command::InstallMock { instance, mock } => todo!(),
+        Command::InstallMock { mock, .. } => {
+            let mut instance = state.instance.write().await;
+            if let Some((_, mocks)) = instance.as_mut() {
+                mocks.push(mock);
+            }
+            Ok(Response::builder()
+                .status(200)
+                .body(Full::new(Bytes::from("")))
+                .unwrap())
+        }
     }
 }
 
@@ -228,7 +253,7 @@ pub async fn bind_socket(
 
 pub async fn run_controlplane(
     listener: TcpListener,
-    state: State,
+    state: SequentialState,
     mode: Mode,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     loop {
@@ -249,16 +274,20 @@ pub async fn run_controlplane(
 
 pub async fn run_mock(
     listener: TcpListener,
-    state: State,
+    state: SequentialState,
     mode: Mode,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     loop {
+        let state = state.clone();
         let (stream, _) = listener.accept().await?;
         let io = TokioIo::new(stream);
 
         tokio::task::spawn(async move {
             if let Err(err) = http1::Builder::new()
-                .serve_connection(io, service_fn(move |req| mock_handler(req, mode)))
+                .serve_connection(
+                    io,
+                    service_fn(move |req| mock_handler(req, state.clone(), mode)),
+                )
                 .await
             {
                 println!("Error serving connection: {:?}", err);
@@ -268,16 +297,16 @@ pub async fn run_mock(
 }
 
 #[derive(Debug, Clone)]
-pub struct State {
+pub struct SequentialState {
     mock_port: u16,
-    instances: Arc<RwLock<HashMap<String, Instance>>>,
+    instance: Arc<RwLock<Option<(InstanceId, Vec<Mock>)>>>,
 }
 
-impl State {
+impl SequentialState {
     pub fn new(mock_port: u16) -> Self {
         Self {
             mock_port,
-            instances: Arc::new(RwLock::new(HashMap::new())),
+            instance: Arc::default(),
         }
     }
 }
@@ -289,4 +318,21 @@ pub struct Instance {}
 pub enum Mode {
     Mock,
     Proxy,
+}
+
+trait RequestMatch {
+    fn matches<T>(&self, req: &Request<T>) -> bool
+    where
+        T: Body + std::fmt::Debug,
+        T::Error: std::fmt::Debug;
+}
+
+impl RequestMatch for Mock {
+    fn matches<T>(&self, req: &Request<T>) -> bool
+    where
+        T: Body + std::fmt::Debug,
+        T::Error: std::fmt::Debug,
+    {
+        self.when.match_path == req.uri().path()
+    }
 }

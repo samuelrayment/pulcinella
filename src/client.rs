@@ -1,10 +1,11 @@
 use thiserror::Error;
 
-use crate::interchange::{Command, InstanceId};
+use crate::interchange::{Command, InstanceId, Mock, ThenState, WhenState};
 
 pub struct Client {
-    control_plane: String,
+    control_plane_url: String,
     instance: InstanceId,
+    mock_url: String,
 }
 
 impl Client {
@@ -32,8 +33,9 @@ impl Client {
         println!("instance: {:?}", response.instance);
 
         Ok(Self {
-            control_plane: String::from(control_plane_url),
+            control_plane_url: String::from(control_plane_url),
             instance: response.instance,
+            mock_url: response.url,
         })
     }
 
@@ -42,13 +44,16 @@ impl Client {
         F: FnOnce(WhenBuilder) -> WhenBuilder,
     {
         MockBuilder {
-            state: when(WhenBuilder {match_path: String::from("")}).build(),
+            state: when(WhenBuilder {
+                match_path: String::from(""),
+            })
+            .build(),
+            client: self,
         }
     }
 
     pub fn url(&self) -> String {
-        //self.base_url.clone()
-        String::from("")
+        self.mock_url.clone()
     }
 }
 
@@ -56,24 +61,52 @@ pub enum Method {
     GET,
 }
 
-pub struct MockBuilder<State> {
+pub struct MockBuilder<'a, State> {
     state: State,
+    client: &'a Client,
 }
 
-impl MockBuilder<WhenState> {
-    pub fn then<F>(self, then: F) -> MockBuilder<ThenState>
+impl<'a> MockBuilder<'a, WhenState> {
+    pub fn then<F>(self, then: F) -> MockBuilder<'a, WhenThenState>
     where
         F: FnOnce(ThenBuilder) -> ThenBuilder,
     {
         MockBuilder {
-            state: then(ThenBuilder{ status: 200 }).build(self.state),
+            state: then(ThenBuilder { status: 200 }).build(self.state),
+            client: self.client,
         }
     }
 }
 
-impl MockBuilder<ThenState> {
+impl<'a> MockBuilder<'a, WhenThenState> {
     // TODO should this return an ID to be used to delete the mock?
-    pub async fn send(self) {}
+    pub async fn send(self) -> Result<(), ClientError> {
+        let mock = Command::InstallMock {
+            mock: Mock {
+                when: self.state.when_state,
+                then: self.state.then_state,
+            },
+            instance: self.client.instance.clone(),
+        };
+        let body = reqwest::Client::new()
+            .post(&self.client.control_plane_url)
+            .body(serde_json::to_string(&mock).unwrap())
+            .send()
+            .await
+            .map_err(|_| ClientError::FailedToConnectToMockServer)
+            .and_then(|res| {
+                if res.status().is_success() {
+                    Ok(res)
+                } else {
+                    Err(ClientError::FailedToCreateTestInstance)
+                }
+            })?
+            .text()
+            .await
+            .map_err(|_| ClientError::FailedToConnectToMockServer)?;
+
+        Ok(())
+    }
 }
 
 pub struct WhenBuilder {
@@ -103,18 +136,20 @@ impl ThenBuilder {
         self
     }
 
-    fn build(self, when_state: WhenState) -> ThenState {
-        ThenState { when_state, status: self.status }
+    fn build(self, when_state: WhenState) -> WhenThenState {
+        let then_state = ThenState {
+            status: self.status,
+        };
+        WhenThenState {
+            when_state,
+            then_state,
+        }
     }
 }
 
-pub struct WhenState {
-    match_path: String,
-}
-
-pub struct ThenState {
+pub struct WhenThenState {
     when_state: WhenState,
-    status: u16,
+    then_state: ThenState,
 }
 
 #[derive(Error, Debug)]
