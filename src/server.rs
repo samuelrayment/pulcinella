@@ -47,7 +47,7 @@ where
         for mock in mocks {
             if mock.matches(&req) {
                 return Ok(Response::builder()
-                    .status(200)
+                    .status(mock.then.status)
                     .body(Full::new(Bytes::from_static(b"---")))
                     .unwrap());
             }
