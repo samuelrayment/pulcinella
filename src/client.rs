@@ -3,17 +3,14 @@ use thiserror::Error;
 use crate::interchange::{Command, InstanceId};
 
 pub struct Client {
-    base_url: String,
     control_plane: String,
     instance: InstanceId,
 }
 
 impl Client {
-    pub async fn new(url: &str) -> Result<Self, ClientError> {
-        let control_plane = format!("{}/cp", url);
-
+    pub async fn new(control_plane_url: &str) -> Result<Self, ClientError> {
         let body = reqwest::Client::new()
-            .post(&control_plane)
+            .post(control_plane_url)
             .body(serde_json::to_string(&Command::CreateInstance).unwrap())
             .send()
             .await
@@ -35,8 +32,7 @@ impl Client {
         println!("instance: {:?}", response.instance);
 
         Ok(Self {
-            base_url: String::from(url),
-            control_plane,
+            control_plane: String::from(control_plane_url),
             instance: response.instance,
         })
     }
@@ -51,7 +47,8 @@ impl Client {
     }
 
     pub fn url(&self) -> String {
-        self.base_url.clone()
+        //self.base_url.clone()
+        String::from("")
     }
 }
 

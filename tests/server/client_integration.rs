@@ -23,8 +23,8 @@ async fn should_respond_with_404_for_non_existent_path() {
 
 //#[tokio::test]
 //async fn should_respond_with_200_for_matched_path() {
-//    let port = start_server().await;
-//    let mock_client = Client::new(&format!("http://localhost:{}", port))
+//    let server_ports = start_server(Mode::Mock).await;
+//    let mock_client = Client::new(&format!("http://localhost:{}", server_ports.control_plane))
 //        .await
 //        .expect("mock client failed to start");
 //    mock_client

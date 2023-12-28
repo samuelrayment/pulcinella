@@ -18,7 +18,7 @@ use crate::interchange::{Command, InstanceId, InstanceResponse};
 
 pub async fn handler<T>(
     req: Request<T>,
-    state: Arc<RwLock<State>>,
+    state: State,
 ) -> Result<Response<Full<Bytes>>, Infallible>
 where
     T: Body + std::fmt::Debug,
@@ -183,7 +183,7 @@ async fn proxy_response_to_response(
 
 async fn handle_control_plane<T>(
     req: Request<T>,
-    state: Arc<RwLock<State>>,
+    state: State,
 ) -> Result<Response<Full<Bytes>>, Infallible>
 where
     T: Body,
@@ -196,8 +196,8 @@ where
             let instance = Instance {};
             let instance_id = uuid7::uuid7().to_string();
             {
-                let mut state = state.write().await;
-                state.instances.insert(instance_id.clone(), instance);
+                let mut instances = state.instances.write().await;
+                instances.insert(instance_id.clone(), instance);
             }
             let instance_response = InstanceResponse {
                 instance: InstanceId(instance_id),
@@ -228,11 +228,9 @@ pub async fn bind_socket(
 
 pub async fn run_controlplane(
     listener: TcpListener,
+    state: State,
     mode: Mode,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let state = Arc::new(RwLock::new(State {
-        instances: HashMap::new(),
-    }));
     loop {
         let state = state.clone();
         let (stream, _) = listener.accept().await?;
@@ -251,6 +249,7 @@ pub async fn run_controlplane(
 
 pub async fn run_mock(
     listener: TcpListener,
+    state: State,
     mode: Mode,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     loop {
@@ -268,9 +267,19 @@ pub async fn run_mock(
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct State {
-    instances: HashMap<String, Instance>,
+    mock_port: u16,
+    instances: Arc<RwLock<HashMap<String, Instance>>>,
+}
+
+impl State {
+    pub fn new(mock_port: u16) -> Self {
+        Self {
+            mock_port,
+            instances: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
 }
 
 #[derive(Debug)]
