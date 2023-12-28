@@ -2,7 +2,7 @@ use std::{
     borrow::BorrowMut, collections::HashMap, convert::Infallible, net::SocketAddr, sync::Arc,
 };
 
-use http_body_util::{BodyExt, Full};
+use http_body_util::{BodyExt, Empty, Full};
 use hyper::{
     body::{Body, Bytes},
     server::conn::http1,
@@ -220,6 +220,8 @@ where
             let mut instance = state.instance.write().await;
             if let Some((_, mocks)) = instance.as_mut() {
                 mocks.push(mock);
+                mocks.sort_by_key(|m| m.priority());
+                mocks.reverse();
             }
             Ok(Response::builder()
                 .status(200)
@@ -313,6 +315,7 @@ pub enum Mode {
 
 trait RequestMatch {
     fn matches(&self, req: &UnpackedRequest) -> bool;
+    fn priority(&self) -> u8;
 }
 
 impl RequestMatch for Mock {
@@ -320,6 +323,11 @@ impl RequestMatch for Mock {
         let params_match = self.check_params_match(req);
 
         self.when.match_path == req.uri.path() && params_match
+    }
+
+    fn priority(&self) -> u8 {
+        let form_count = if self.when.form_data.is_some() { 1 } else { 0 };
+        form_count
     }
 }
 
@@ -330,9 +338,9 @@ impl Mock {
                 .into_owned()
                 .collect::<HashMap<String, String>>();
             let correct_param_count = params.len() == form_data.len();
-            let correct_params = form_data.iter().all(|(key, value)| {
-                params.get(key).map(|v| v == value).unwrap_or(false)
-            });
+            let correct_params = form_data
+                .iter()
+                .all(|(key, value)| params.get(key).map(|v| v == value).unwrap_or(false));
             correct_param_count && correct_params
         } else {
             true
