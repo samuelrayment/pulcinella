@@ -35,7 +35,8 @@ async fn should_respond_with_200_for_matched_path() {
         .when(|when| when.path(&path))
         .then(|then| then.status(200))
         .send()
-        .await;
+        .await
+        .expect("Failed to install mock");
 
     let client = client
         .get(&format!("{}{}", mock_client.url(), path))
@@ -62,7 +63,8 @@ async fn should_respond_with_404_for_unmatched_path() {
         .when(|when| when.path(&server_path))
         .then(|then| then.status(200))
         .send()
-        .await;
+        .await
+        .expect("Failed to install mock");
 
     let client = client
         .get(&format!("{}{}", mock_client.url(), client_path))
@@ -85,7 +87,9 @@ async fn should_respond_with_another_status_code_for_matched_path() {
         .when(|when| when.path(&server_path))
         .then(|then| then.status(201))
         .send()
-        .await;
+        .await
+        .expect("Failed to install mock");
+
     let client = client
         .get(&format!("{}{}", mock_client.url(), server_path))
         .send()
@@ -93,6 +97,71 @@ async fn should_respond_with_another_status_code_for_matched_path() {
         .expect("Failed to send request");
 
     assert_eq!(client.status(), 201);
+}
+
+#[tokio::test]
+async fn should_respond_with_404_for_matched_path_and_unmatched_form_data() {
+    let form_name: String = Faker.fake();
+    let form_name2: String = Faker.fake();
+    let form_value: String = Faker.fake();
+    let form_value2: String = Faker.fake();
+
+    let server_path = format!("/{}", Faker.fake::<String>());
+    let Dsl {
+        control: mock_client,
+        reqwest_client: client,
+    } = setup_server().await;
+
+    mock_client
+        .when(|when| {
+            when.path(&server_path)
+                .form_data(&[(form_name, form_value), (form_name2, form_value2)])
+        })
+        .then(|then| then.status(200))
+        .send()
+        .await
+        .expect("Failed to install mock");
+    let client = client
+        .get(&format!("{}{}", mock_client.url(), server_path))
+        .send()
+        .await
+        .expect("Failed to send request");
+
+    assert_eq!(client.status(), 404);
+}
+
+#[tokio::test]
+async fn should_respond_with_200_for_matched_path_and_matched_form_data() {
+    let form_name: String = Faker.fake();
+    let form_name2: String = Faker.fake();
+    let form_value: String = Faker.fake();
+    let form_value2: String = Faker.fake();
+
+    let server_path = format!("/{}", Faker.fake::<String>());
+    let Dsl {
+        control: mock_client,
+        reqwest_client: client,
+    } = setup_server().await;
+
+    mock_client
+        .when(|when| {
+            when.path(&server_path).form_data(&[
+                (form_name.clone(), form_value.clone()),
+                (form_name2.clone(), form_value2.clone()),
+            ])
+        })
+        .then(|then| then.status(200))
+        .send()
+        .await
+        .expect("Failed to install mock");
+    let client = client
+        .post(&format!("{}{}", mock_client.url(), server_path))
+        .form(&[(form_name, form_value), (form_name2, form_value2)])
+        .send()
+        .await
+        .expect("Failed to send request");
+
+    assert_eq!(client.status(), 200);
 }
 
 struct Dsl {

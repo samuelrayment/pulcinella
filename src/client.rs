@@ -44,10 +44,7 @@ impl Client {
         F: FnOnce(WhenBuilder) -> WhenBuilder,
     {
         MockBuilder {
-            state: when(WhenBuilder {
-                match_path: String::from(""),
-            })
-            .build(),
+            state: when(WhenBuilder::default()).build(),
             client: self,
         }
     }
@@ -111,6 +108,16 @@ impl<'a> MockBuilder<'a, WhenThenState> {
 
 pub struct WhenBuilder {
     match_path: String,
+    form_data: Option<Vec<(String, String)>>,
+}
+
+impl Default for WhenBuilder {
+    fn default() -> Self {
+        Self {
+            match_path: String::from(""),
+            form_data: None,
+        }
+    }
 }
 
 impl WhenBuilder {
@@ -119,9 +126,15 @@ impl WhenBuilder {
         self
     }
 
+    pub fn form_data(mut self, form_data: &[(String, String)]) -> Self {
+        self.form_data = Some(form_data.to_vec());
+        self
+    }
+
     fn build(self) -> WhenState {
         WhenState {
             match_path: self.match_path,
+            form_data: self.form_data,
         }
     }
 }

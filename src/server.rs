@@ -1,4 +1,6 @@
-use std::{collections::HashMap, convert::Infallible, net::SocketAddr, sync::Arc};
+use std::{
+    borrow::BorrowMut, collections::HashMap, convert::Infallible, net::SocketAddr, sync::Arc,
+};
 
 use http_body_util::{BodyExt, Full};
 use hyper::{
@@ -43,6 +45,8 @@ where
     T::Error: std::fmt::Debug,
 {
     let instance = state.instance.read().await;
+    let req = UnpackedRequest::from_request(req).await;
+
     if let Some((_, mocks)) = instance.as_ref() {
         for mock in mocks {
             if mock.matches(&req) {
@@ -68,18 +72,12 @@ where
     }
 }
 
-async fn request_from_proxy<T>(
-    req: Request<T>,
-) -> Result<Response<hyper::body::Incoming>, ProxyError>
-where
-    T: Body + std::fmt::Debug,
-    T::Error: std::fmt::Debug,
-{
+async fn request_from_proxy(
+    req: UnpackedRequest,
+) -> Result<Response<hyper::body::Incoming>, ProxyError> {
     println!("Request: {:?}", req);
-    let method = req.method().clone();
-
     let url = req
-        .headers()
+        .headers
         .get("host")
         .and_then(|host| host.to_str().ok()?.parse::<hyper::Uri>().ok())
         .ok_or(ProxyError::BadHostHeader)?;
@@ -103,20 +101,13 @@ where
         }
     });
 
-    let mut builder = Request::builder().method(method).uri(req.uri().path());
-    let request_headers = req.headers().clone();
-    let body = req
-        .into_body()
-        .collect()
-        .await
-        .map_err(|_| ProxyError::CannotReadRequestBody)?
-        .to_bytes();
+    let mut builder = Request::builder().method(req.method).uri(req.uri.path());
 
     if let Some(headers) = builder.headers_mut() {
-        *headers = request_headers;
+        *headers = req.headers;
     }
     let proxied_req = builder
-        .body(Full::new(body))
+        .body(Full::new(req.body))
         .map_err(|_| ProxyError::CannotReadRequestBody)?;
 
     let res = sender
@@ -321,18 +312,63 @@ pub enum Mode {
 }
 
 trait RequestMatch {
-    fn matches<T>(&self, req: &Request<T>) -> bool
-    where
-        T: Body + std::fmt::Debug,
-        T::Error: std::fmt::Debug;
+    fn matches(&self, req: &UnpackedRequest) -> bool;
 }
 
 impl RequestMatch for Mock {
-    fn matches<T>(&self, req: &Request<T>) -> bool
+    fn matches(&self, req: &UnpackedRequest) -> bool {
+        let params_match = self.check_params_match(req);
+
+        self.when.match_path == req.uri.path() && params_match
+    }
+}
+
+impl Mock {
+    fn check_params_match(&self, req: &UnpackedRequest) -> bool {
+        let params_match = if let Some(form_data) = &self.when.form_data {
+            let params = form_urlencoded::parse(req.body.as_ref())
+                .into_owned()
+                .collect::<HashMap<String, String>>();
+            let correct_param_count = params.len() == form_data.len();
+            let correct_params = form_data.iter().all(|(key, value)| {
+                params.get(key).map(|v| v == value).unwrap_or(false)
+            });
+            correct_param_count && correct_params
+        } else {
+            true
+        };
+        params_match
+    }
+}
+
+#[derive(Debug)]
+struct UnpackedRequest {
+    method: hyper::Method,
+    headers: hyper::HeaderMap,
+    uri: hyper::Uri,
+    body: Bytes,
+}
+
+impl UnpackedRequest {
+    async fn from_request<T>(req: Request<T>) -> Self
     where
         T: Body + std::fmt::Debug,
         T::Error: std::fmt::Debug,
     {
-        self.when.match_path == req.uri().path()
+        let method = req.method().clone();
+        let headers = req.headers().clone();
+        let uri = req.uri().clone();
+        let body = req
+            .into_body()
+            .collect()
+            .await
+            .expect("Cannot read body")
+            .to_bytes();
+        Self {
+            method,
+            headers,
+            uri,
+            body,
+        }
     }
 }
