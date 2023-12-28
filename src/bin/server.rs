@@ -7,8 +7,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     //let addr = SocketAddr::from(([127, 0, 0, 1], 0));
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
 
-    let (port, listener) = bind_socket(addr).await?;
-    println!("Listening on http://127.0.0.1:{}/", port);
+    let control_plane = bind_socket(addr).await?;
+    println!("Listening on http://127.0.0.1:{}/", control_plane.port);
 
-    run(listener, Mode::Proxy).await
+    run(control_plane.listener, Mode::Proxy).await
 }

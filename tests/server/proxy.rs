@@ -175,13 +175,13 @@ async fn start_proxied_server(
     expectations: ProxyExpectations,
     response_options: ProxyResponseOptions,
 ) -> u16 {
-    let (port, listener) = bind_socket(SocketAddr::from(([127, 0, 0, 1], 0)))
+    let binding = bind_socket(SocketAddr::from(([127, 0, 0, 1], 0)))
         .await
         .unwrap();
-    let server = run_proxied(listener, expectations, response_options);
+    let server = run_proxied(binding.listener, expectations, response_options);
     let _ = tokio::spawn(server);
 
-    port
+    binding.port
 }
 
 async fn run_proxied(

@@ -1,6 +1,6 @@
 use std::{collections::HashMap, convert::Infallible, net::SocketAddr, sync::Arc};
 
-use http_body_util::{BodyExt, Empty, Full};
+use http_body_util::{BodyExt, Full};
 use hyper::{
     body::{Body, Bytes},
     server::conn::http1,
@@ -211,12 +211,17 @@ where
     }
 }
 
+pub struct SocketBinding {
+    pub port: u16,
+    pub listener: TcpListener,
+}
+
 pub async fn bind_socket(
     addr: SocketAddr,
-) -> Result<(u16, TcpListener), Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<SocketBinding, Box<dyn std::error::Error + Send + Sync>> {
     let listener = TcpListener::bind(addr).await?;
     let port = listener.local_addr()?.port();
-    Ok((port, listener))
+    Ok(SocketBinding { port, listener })
 }
 
 pub async fn run(
