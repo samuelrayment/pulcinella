@@ -1,6 +1,6 @@
 use std::net::SocketAddr;
 
-use wasm_test_server::server::{run, bind_socket, Mode};
+use wasm_test_server::server::{run_controlplane, bind_socket, Mode};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -10,5 +10,5 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let control_plane = bind_socket(addr).await?;
     println!("Listening on http://127.0.0.1:{}/", control_plane.port);
 
-    run(control_plane.listener, Mode::Proxy).await
+    run_controlplane(control_plane.listener, Mode::Proxy).await
 }

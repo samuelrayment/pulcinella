@@ -19,34 +19,36 @@ use crate::interchange::{Command, InstanceId, InstanceResponse};
 pub async fn handler<T>(
     req: Request<T>,
     state: Arc<RwLock<State>>,
-    mode: Mode,
 ) -> Result<Response<Full<Bytes>>, Infallible>
 where
     T: Body + std::fmt::Debug,
     T::Error: std::fmt::Debug,
 {
     match (req.method(), req.uri().path()) {
-        (&hyper::Method::POST, "/cp") => handle_control_plane(req, state).await,
-        _ => match mode {
-            Mode::Mock => Ok(Response::builder()
-                .status(404)
-                .body(Full::new(Bytes::from_static(b"Not Found")))
-                .unwrap()),
-            Mode::Proxy => proxy_handler(req).await,
-        },
+        (&hyper::Method::POST, "/") => handle_control_plane(req, state).await,
+        _ => Ok(Response::builder()
+            .status(404)
+            .body(Full::new(Bytes::from_static(b"Not Found")))
+            .unwrap()),
     }
 }
 
-async fn proxy_handler<T>(req: Request<T>) -> Result<Response<Full<Bytes>>, Infallible>
+async fn mock_handler<T>(req: Request<T>, mode: Mode) -> Result<Response<Full<Bytes>>, Infallible>
 where
     T: Body + std::fmt::Debug,
     T::Error: std::fmt::Debug,
 {
-    match request_from_proxy(req).await {
-        Ok(res) => proxy_response_to_response(res)
-            .await
-            .or_else(|e| e.to_response()),
-        Err(e) => e.to_response(),
+    match mode {
+        Mode::Proxy => match request_from_proxy(req).await {
+            Ok(res) => proxy_response_to_response(res)
+                .await
+                .or_else(|e| e.to_response()),
+            Err(e) => e.to_response(),
+        },
+        Mode::Mock => Ok(Response::builder()
+            .status(404)
+            .body(Full::new(Bytes::from_static(b"Not Found")))
+            .unwrap()),
     }
 }
 
@@ -172,9 +174,9 @@ async fn proxy_response_to_response(
     if let Some(headers_map) = builder.headers_mut() {
         *headers_map = res_headers;
     }
-    let response = builder.body(Full::new(bytes)).map_err(|_| {
-        ProxyError::CannotConstructResponseBody
-    })?;
+    let response = builder
+        .body(Full::new(bytes))
+        .map_err(|_| ProxyError::CannotConstructResponseBody)?;
 
     Ok(response)
 }
@@ -224,7 +226,7 @@ pub async fn bind_socket(
     Ok(SocketBinding { port, listener })
 }
 
-pub async fn run(
+pub async fn run_controlplane(
     listener: TcpListener,
     mode: Mode,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -238,7 +240,26 @@ pub async fn run(
 
         tokio::task::spawn(async move {
             if let Err(err) = http1::Builder::new()
-                .serve_connection(io, service_fn(move |req| handler(req, state.clone(), mode)))
+                .serve_connection(io, service_fn(move |req| handler(req, state.clone())))
+                .await
+            {
+                println!("Error serving connection: {:?}", err);
+            }
+        });
+    }
+}
+
+pub async fn run_mock(
+    listener: TcpListener,
+    mode: Mode,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    loop {
+        let (stream, _) = listener.accept().await?;
+        let io = TokioIo::new(stream);
+
+        tokio::task::spawn(async move {
+            if let Err(err) = http1::Builder::new()
+                .serve_connection(io, service_fn(move |req| mock_handler(req, mode)))
                 .await
             {
                 println!("Error serving connection: {:?}", err);

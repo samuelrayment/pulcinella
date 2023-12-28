@@ -11,7 +11,7 @@ use reqwest::header::HeaderValue;
 use std::{convert::Infallible, net::SocketAddr};
 use tokio::net::TcpListener;
 
-use wasm_test_server::server::{bind_socket, run, Mode};
+use wasm_test_server::server::{bind_socket, run_controlplane, Mode};
 
 use crate::helpers::start_server;
 
@@ -19,7 +19,6 @@ use crate::helpers::start_server;
 async fn should_proxy_through_to_real_server() {
     let header_name = Faker.fake::<String>();
     let header_value = Faker.fake::<String>();
-    let server_port = start_server(Mode::Proxy).await;
     let proxy_port = start_proxied_server(
         ProxyExpectations::default(),
         ProxyResponseOptions {
@@ -28,7 +27,7 @@ async fn should_proxy_through_to_real_server() {
         },
     )
     .await;
-    let client = create_client(server_port);
+    let client = setup_server().await;
 
     let response = client
         .get(&format!("http://localhost:{}/", proxy_port))
@@ -51,7 +50,6 @@ async fn should_proxy_through_to_real_server() {
 async fn should_proxy_through_headers_to_real_server() {
     let header_name = Faker.fake::<String>();
     let header_value = Faker.fake::<String>();
-    let server_port = start_server(Mode::Proxy).await;
     let proxy_port = start_proxied_server(
         ProxyExpectations {
             expected_headers: vec![(header_name.clone(), header_value.clone())],
@@ -60,7 +58,7 @@ async fn should_proxy_through_headers_to_real_server() {
         ProxyResponseOptions::default(),
     )
     .await;
-    let client = create_client(server_port);
+    let client = setup_server().await;
 
     let response = client
         .get(&format!("http://localhost:{}/", proxy_port))
@@ -76,7 +74,6 @@ async fn should_proxy_through_headers_to_real_server() {
 #[tokio::test]
 async fn should_proxy_through_post_and_body() {
     let body = Faker.fake::<String>();
-    let server_port = start_server(Mode::Proxy).await;
     let proxy_port = start_proxied_server(
         ProxyExpectations {
             expected_body: Some(body.clone()),
@@ -86,7 +83,7 @@ async fn should_proxy_through_post_and_body() {
         ProxyResponseOptions::default(),
     )
     .await;
-    let client = create_client(server_port);
+    let client = setup_server().await;
 
     let response = client
         .post(&format!("http://localhost:{}/", proxy_port))
@@ -101,13 +98,12 @@ async fn should_proxy_through_post_and_body() {
 
 #[tokio::test]
 async fn should_respond_with_bad_request_if_host_header_not_correctly_formed() {
-    let server_port = start_server(Mode::Proxy).await;
     let proxy_port = start_proxied_server(
         ProxyExpectations::default(),
         ProxyResponseOptions::default(),
     )
     .await;
-    let client = create_client(server_port);
+    let client = setup_server().await;
 
     let response = client
         .post(&format!("http://localhost:{}/", proxy_port))
@@ -122,13 +118,12 @@ async fn should_respond_with_bad_request_if_host_header_not_correctly_formed() {
 
 #[tokio::test]
 async fn should_respond_with_upstream_not_found_if_server_not_available() {
-    let server_port = start_server(Mode::Proxy).await;
     let _proxy_port = start_proxied_server(
         ProxyExpectations::default(),
         ProxyResponseOptions::default(),
     )
     .await;
-    let client = create_client(server_port);
+    let client = setup_server().await;
 
     let response = client
         .post(&format!("http://localhost:{}/", 1))
@@ -143,7 +138,6 @@ async fn should_respond_with_upstream_not_found_if_server_not_available() {
 #[tokio::test]
 async fn should_respond_with_upstream_for_different_path() {
     let path = Faker.fake::<String>();
-    let server_port = start_server(Mode::Proxy).await;
     let proxy_port = start_proxied_server(
         ProxyExpectations {
             expected_path: Some(format!("/{}", path)),
@@ -152,7 +146,7 @@ async fn should_respond_with_upstream_for_different_path() {
         ProxyResponseOptions::default(),
     )
     .await;
-    let client = create_client(server_port);
+    let client = setup_server().await;
 
     let response = client
         .post(&format!("http://localhost:{}/{}", proxy_port, path))
@@ -164,6 +158,10 @@ async fn should_respond_with_upstream_for_different_path() {
     assert_eq!("hello", response.text().await.unwrap());
 }
 
+async fn setup_server() -> reqwest::Client {
+    let server_ports = start_server(Mode::Proxy).await;
+    create_client(server_ports.mock)
+}
 
 fn create_client(server_port: u16) -> reqwest::Client {
     let proxy = reqwest::Proxy::http(&format!("http://localhost:{}/", server_port)).unwrap();
