@@ -30,4 +30,5 @@ pub struct WhenState {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ThenState {
     pub status: u16,
+    pub headers: Vec<(String, String)>,
 }

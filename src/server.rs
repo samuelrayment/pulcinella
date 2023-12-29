@@ -50,8 +50,11 @@ where
     if let Some((_, mocks)) = instance.as_ref() {
         for mock in mocks {
             if mock.matches(&req) {
-                return Ok(Response::builder()
-                    .status(mock.then.status)
+                let builder = Response::builder().status(mock.then.status);
+                let builder = mock.then.headers.iter().fold(builder, |builder, (k, v)| {
+                    builder.header(k, v)
+                });
+                return Ok(builder
                     .body(Full::new(Bytes::from_static(b"---")))
                     .unwrap());
             }

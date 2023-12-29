@@ -69,7 +69,7 @@ impl<'a> MockBuilder<'a, WhenState> {
         F: FnOnce(ThenBuilder) -> ThenBuilder,
     {
         MockBuilder {
-            state: then(ThenBuilder { status: 200 }).build(self.state),
+            state: then(ThenBuilder::new()).build(self.state),
             client: self.client,
         }
     }
@@ -141,17 +141,31 @@ impl WhenBuilder {
 
 pub struct ThenBuilder {
     status: u16,
+    headers: Vec<(String, String)>,
 }
 
 impl ThenBuilder {
+    fn new() -> Self {
+        Self {
+            status: 0,
+            headers: vec![],
+        }
+    }
+
     pub fn status(mut self, status: u16) -> Self {
         self.status = status;
+        self
+    }
+
+    pub fn header(mut self, name: &str, value: &str) -> Self {
+        self.headers.push((String::from(name), String::from(value)));
         self
     }
 
     fn build(self, when_state: WhenState) -> WhenThenState {
         let then_state = ThenState {
             status: self.status,
+            headers: self.headers,
         };
         WhenThenState {
             when_state,

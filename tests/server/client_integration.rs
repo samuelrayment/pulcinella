@@ -178,9 +178,7 @@ async fn should_respond_with_the_most_specific_mock() {
     } = setup_server().await;
 
     mock_client
-        .when(|when| {
-            when.path(&server_path)
-        })
+        .when(|when| when.path(&server_path))
         .then(|then| then.status(200))
         .send()
         .await
@@ -206,6 +204,40 @@ async fn should_respond_with_the_most_specific_mock() {
         .expect("Failed to send request");
 
     assert_eq!(client.status(), 201);
+}
+
+#[tokio::test]
+async fn should_respond_with_headers() {
+    let header_name = Faker.fake::<String>();
+    let header_value = Faker.fake::<String>();
+    let server_path = format!("/{}", Faker.fake::<String>());
+    let Dsl {
+        control: mock_client,
+        reqwest_client: client,
+    } = setup_server().await;
+
+    mock_client
+        .when(|when| when.path(&server_path))
+        .then(|then| then.status(200).header(&header_name, &header_value))
+        .send()
+        .await
+        .expect("Failed to install mock");
+
+    let client = client
+        .get(&format!("{}{}", mock_client.url(), server_path))
+        .send()
+        .await
+        .expect("Failed to send request");
+
+    assert_eq!(client.status(), 200);
+    assert_eq!(
+        header_value.as_bytes(),
+        client
+            .headers()
+            .get(&header_name)
+            .expect("Expected header to be present")
+            .as_bytes(),
+    );
 }
 
 struct Dsl {
