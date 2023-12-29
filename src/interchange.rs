@@ -1,3 +1,4 @@
+use hyper::body::Bytes;
 use serde_derive::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -31,4 +32,5 @@ pub struct WhenState {
 pub struct ThenState {
     pub status: u16,
     pub headers: Vec<(String, String)>,
+    pub body: Vec<u8>,
 }

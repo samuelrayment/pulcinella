@@ -55,7 +55,7 @@ where
                     builder.header(k, v)
                 });
                 return Ok(builder
-                    .body(Full::new(Bytes::from_static(b"---")))
+                    .body(Full::new(Bytes::from(mock.then.body.clone())))
                     .unwrap());
             }
         }

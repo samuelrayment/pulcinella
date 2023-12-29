@@ -1,3 +1,4 @@
+use hyper::body::Bytes;
 use thiserror::Error;
 
 use crate::interchange::{Command, InstanceId, Mock, ThenState, WhenState};
@@ -142,6 +143,7 @@ impl WhenBuilder {
 pub struct ThenBuilder {
     status: u16,
     headers: Vec<(String, String)>,
+    body: Vec<u8>,
 }
 
 impl ThenBuilder {
@@ -149,6 +151,7 @@ impl ThenBuilder {
         Self {
             status: 0,
             headers: vec![],
+            body: vec![],
         }
     }
 
@@ -162,10 +165,16 @@ impl ThenBuilder {
         self
     }
 
+    pub fn body(mut self, body: impl Into<Vec<u8>>) -> Self {
+        self.body = body.into();
+        self
+    }
+
     fn build(self, when_state: WhenState) -> WhenThenState {
         let then_state = ThenState {
             status: self.status,
             headers: self.headers,
+            body: self.body,
         };
         WhenThenState {
             when_state,

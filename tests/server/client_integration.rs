@@ -230,11 +230,41 @@ async fn should_respond_with_headers() {
         .expect("Failed to send request");
 
     assert_eq!(client.status(), 200);
+    assert_header(client, &header_name, &header_value);
+}
+
+#[tokio::test]
+async fn should_respond_with_a_body() {
+    let body = Faker.fake::<String>();
+    let server_path = format!("/{}", Faker.fake::<String>());
+    let Dsl {
+        control: mock_client,
+        reqwest_client: client,
+    } = setup_server().await;
+
+    mock_client
+        .when(|when| when.path(&server_path))
+        .then(|then| then.status(200).body(body.clone()))
+        .send()
+        .await
+        .expect("Failed to install mock");
+
+    let client = client
+        .get(&format!("{}{}", mock_client.url(), server_path))
+        .send()
+        .await
+        .expect("Failed to send request");
+
+    assert_eq!(client.status(), 200);
+    assert_eq!(body, client.text().await.unwrap());
+}
+
+fn assert_header(response: reqwest::Response, header_name: impl AsRef<str>, header_value: impl AsRef<str>) {
     assert_eq!(
-        header_value.as_bytes(),
-        client
+        header_value.as_ref().as_bytes(),
+        response
             .headers()
-            .get(&header_name)
+            .get(header_name.as_ref())
             .expect("Expected header to be present")
             .as_bytes(),
     );
