@@ -1,4 +1,3 @@
-
 use thiserror::Error;
 
 use crate::interchange::{Command, InstanceId, MockRule, ThenState, WhenRules};
@@ -114,8 +113,6 @@ pub struct WhenBuilder {
     match_path: String,
     form_data: Vec<(String, String)>,
 }
-
-
 
 impl WhenBuilder {
     pub fn path(mut self, path: &str) -> Self {
