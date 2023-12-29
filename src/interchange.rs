@@ -1,4 +1,4 @@
-use hyper::body::Bytes;
+
 use serde_derive::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -13,7 +13,12 @@ pub struct InstanceResponse {
     pub url: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug)]
+pub enum InstallError {
+    InstanceNotFound,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct InstanceId(pub(crate) String);
 
 #[derive(Serialize, Deserialize, Debug)]

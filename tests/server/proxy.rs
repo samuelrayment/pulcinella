@@ -11,7 +11,7 @@ use reqwest::header::HeaderValue;
 use std::{convert::Infallible, net::SocketAddr};
 use tokio::net::TcpListener;
 
-use wasm_test_server::server::{bind_socket, run_controlplane, Mode};
+use wasm_test_server::server::{bind_socket, Mode};
 
 use crate::helpers::start_server;
 
@@ -21,6 +21,7 @@ async fn should_proxy_through_to_real_server() {
     let header_value = Faker.fake::<String>();
     let proxy_port = start_proxied_server(
         ProxyExpectations::default(),
+        #[allow(clippy::needless_update)]
         ProxyResponseOptions {
             headers: vec![(header_name.clone(), header_value.clone())],
             ..Default::default()
@@ -164,9 +165,9 @@ async fn setup_server() -> reqwest::Client {
 }
 
 fn create_client(server_port: u16) -> reqwest::Client {
-    let proxy = reqwest::Proxy::http(&format!("http://localhost:{}/", server_port)).unwrap();
-    let client = reqwest::ClientBuilder::new().proxy(proxy).build().unwrap();
-    client
+    let proxy = reqwest::Proxy::http(format!("http://localhost:{}/", server_port)).unwrap();
+    
+    reqwest::ClientBuilder::new().proxy(proxy).build().unwrap()
 }
 
 async fn start_proxied_server(
@@ -177,7 +178,7 @@ async fn start_proxied_server(
         .await
         .unwrap();
     let server = run_proxied(binding.listener, expectations, response_options);
-    let _ = tokio::spawn(server);
+    tokio::spawn(server);
 
     binding.port
 }

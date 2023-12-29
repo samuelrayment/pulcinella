@@ -1,4 +1,4 @@
-use hyper::body::Bytes;
+
 use thiserror::Error;
 
 use crate::interchange::{Command, InstanceId, Mock, ThenState, WhenState};
@@ -86,7 +86,7 @@ impl<'a> MockBuilder<'a, WhenThenState> {
             },
             instance: self.client.instance.clone(),
         };
-        let body = reqwest::Client::new()
+        let _body = reqwest::Client::new()
             .post(&self.client.control_plane_url)
             .body(serde_json::to_string(&mock).unwrap())
             .send()
@@ -95,6 +95,8 @@ impl<'a> MockBuilder<'a, WhenThenState> {
             .and_then(|res| {
                 if res.status().is_success() {
                     Ok(res)
+                } else if res.status().is_client_error() {
+                    Err(ClientError::InstanceNoLongerValid)
                 } else {
                     Err(ClientError::FailedToCreateTestInstance)
                 }
@@ -107,19 +109,13 @@ impl<'a> MockBuilder<'a, WhenThenState> {
     }
 }
 
+#[derive(Default)]
 pub struct WhenBuilder {
     match_path: String,
     form_data: Vec<(String, String)>,
 }
 
-impl Default for WhenBuilder {
-    fn default() -> Self {
-        Self {
-            match_path: String::from(""),
-            form_data: vec![],
-        }
-    }
-}
+
 
 impl WhenBuilder {
     pub fn path(mut self, path: &str) -> Self {
@@ -191,10 +187,12 @@ pub struct WhenThenState {
     then_state: ThenState,
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq)]
 pub enum ClientError {
     #[error("Failed to start mock client")]
     FailedToConnectToMockServer,
     #[error("Failed to create test instance")]
     FailedToCreateTestInstance,
+    #[error("Mock instance has been replaced with a new instance")]
+    InstanceNoLongerValid,
 }

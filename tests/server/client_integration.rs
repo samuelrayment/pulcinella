@@ -1,19 +1,18 @@
-use std::net::SocketAddr;
-
 use fake::{Fake, Faker};
-use hyper::client;
+
 use wasm_test_server::{
-    client::Client,
-    server::{bind_socket, run_controlplane, Mode},
+    client::{Client, ClientError},
+    server::Mode,
 };
 
-use crate::helpers::start_server;
+use crate::helpers::{start_server, ServerPorts};
 
 #[tokio::test]
 async fn should_respond_with_404_when_no_mocks_specified() {
     let Dsl {
         control: mock_client,
         reqwest_client: client,
+        ..
     } = setup_server().await;
     let response = client
         .get(&format!("{}/non-existent-path", mock_client.url()))
@@ -30,6 +29,7 @@ async fn should_respond_with_200_for_matched_path() {
     let Dsl {
         control: mock_client,
         reqwest_client: client,
+        ..
     } = setup_server().await;
     mock_client
         .when(|when| when.path(&path))
@@ -58,6 +58,7 @@ async fn should_respond_with_404_for_unmatched_path() {
     let Dsl {
         control: mock_client,
         reqwest_client: client,
+        ..
     } = setup_server().await;
     mock_client
         .when(|when| when.path(&server_path))
@@ -81,6 +82,7 @@ async fn should_respond_with_another_status_code_for_matched_path() {
     let Dsl {
         control: mock_client,
         reqwest_client: client,
+        ..
     } = setup_server().await;
 
     mock_client
@@ -110,6 +112,7 @@ async fn should_respond_with_404_for_matched_path_and_unmatched_form_data() {
     let Dsl {
         control: mock_client,
         reqwest_client: client,
+        ..
     } = setup_server().await;
 
     mock_client
@@ -142,6 +145,7 @@ async fn should_respond_with_200_for_matched_path_and_matched_form_data() {
     let Dsl {
         control: mock_client,
         reqwest_client: client,
+        ..
     } = setup_server().await;
 
     mock_client
@@ -175,6 +179,7 @@ async fn should_respond_with_the_most_specific_mock() {
     let Dsl {
         control: mock_client,
         reqwest_client: client,
+        ..
     } = setup_server().await;
 
     mock_client
@@ -213,6 +218,7 @@ async fn should_respond_with_headers() {
     let Dsl {
         control: mock_client,
         reqwest_client: client,
+        ..
     } = setup_server().await;
 
     mock_client
@@ -239,6 +245,7 @@ async fn should_respond_with_a_body() {
     let Dsl {
         control: mock_client,
         reqwest_client: client,
+        ..
     } = setup_server().await;
 
     mock_client
@@ -256,6 +263,53 @@ async fn should_respond_with_a_body() {
 
     assert_eq!(client.status(), 200);
     assert_eq!(body, client.text().await.unwrap());
+}
+
+#[tokio::test]
+async fn should_fail_if_reusing_an_old_client() {
+    let Dsl {
+        control: old_mock_client,
+        server_ports,
+        ..
+    } = setup_server().await;
+    let _new_mock_client = Client::new(&format!("http://localhost:{}", server_ports.control_plane))
+        .await
+        .expect("mock client failed to start");
+
+    let result = old_mock_client
+        .when(|when| when.path("/"))
+        .then(|then| then.status(200))
+        .send()
+        .await;
+    assert_eq!(result, Err(ClientError::InstanceNoLongerValid));
+}
+
+#[tokio::test]
+async fn should_forget_old_mocks_when_new_client() {
+    let Dsl {
+        control: old_mock_client,
+        reqwest_client: client,
+        server_ports,
+        ..
+    } = setup_server().await;
+    let server_path = format!("/{}", Faker.fake::<String>());
+    old_mock_client
+        .when(|when| when.path(&server_path))
+        .then(|then| then.status(200))
+        .send()
+        .await
+        .expect("Failed to install mock");
+
+    let _new_mock_client = Client::new(&format!("http://localhost:{}", server_ports.control_plane))
+        .await
+        .expect("mock client failed to start");
+
+    let response = client
+        .get(&format!("{}{}", old_mock_client.url(), server_path))
+        .send()
+        .await
+        .expect("Failed to send request");
+    assert_eq!(response.status(), 404);
 }
 
 fn assert_header(
@@ -276,6 +330,7 @@ fn assert_header(
 struct Dsl {
     control: Client,
     reqwest_client: reqwest::Client,
+    server_ports: ServerPorts,
 }
 
 async fn setup_server() -> Dsl {
@@ -287,5 +342,6 @@ async fn setup_server() -> Dsl {
     Dsl {
         control: mock_client,
         reqwest_client: client,
+        server_ports,
     }
 }

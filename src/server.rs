@@ -1,8 +1,8 @@
 use std::{
-    borrow::BorrowMut, collections::HashMap, convert::Infallible, net::SocketAddr, sync::Arc,
+    collections::HashMap, convert::Infallible, net::SocketAddr, sync::Arc,
 };
 
-use http_body_util::{BodyExt, Empty, Full};
+use http_body_util::{BodyExt, Full};
 use hyper::{
     body::{Body, Bytes},
     server::conn::http1,
@@ -16,9 +16,9 @@ use tokio::{
     sync::RwLock,
 };
 
-use crate::interchange::{Command, InstanceId, InstanceResponse, Mock};
+use crate::interchange::{Command, InstanceId, InstanceResponse, Mock, InstallError};
 
-pub async fn handler<T>(
+pub async fn control_handler<T>(
     req: Request<T>,
     state: SequentialState,
 ) -> Result<Response<Full<Bytes>>, Infallible>
@@ -221,7 +221,15 @@ where
                 )))
                 .unwrap())
         }
-        Command::InstallMock { mock, .. } => {
+        Command::InstallMock { mock, instance: instance_id } => {
+            if instance_id != state.instance.read().await.as_ref().unwrap().0 {
+                let body = serde_json::to_string(&InstallError::InstanceNotFound).unwrap();
+                return Ok(Response::builder()
+                    .status(400)
+                    .body(Full::new(Bytes::from(body)))
+                    .unwrap());
+            }
+
             let mut instance = state.instance.write().await;
             if let Some((_, mocks)) = instance.as_mut() {
                 mocks.push(mock);
@@ -251,8 +259,7 @@ pub async fn bind_socket(
 
 pub async fn run_controlplane(
     listener: TcpListener,
-    state: SequentialState,
-    mode: Mode,
+    state: SequentialState
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     loop {
         let state = state.clone();
@@ -261,7 +268,7 @@ pub async fn run_controlplane(
 
         tokio::task::spawn(async move {
             if let Err(err) = http1::Builder::new()
-                .serve_connection(io, service_fn(move |req| handler(req, state.clone())))
+                .serve_connection(io, service_fn(move |req| control_handler(req, state.clone())))
                 .await
             {
                 println!("Error serving connection: {:?}", err);
@@ -294,10 +301,12 @@ pub async fn run_mock(
     }
 }
 
+type Instance = Arc<RwLock<Option<(InstanceId, Vec<Mock>)>>>;
+
 #[derive(Debug, Clone)]
 pub struct SequentialState {
     mock_port: u16,
-    instance: Arc<RwLock<Option<(InstanceId, Vec<Mock>)>>>,
+    instance: Instance,
 }
 
 impl SequentialState {
@@ -308,9 +317,6 @@ impl SequentialState {
         }
     }
 }
-
-#[derive(Debug)]
-pub struct Instance {}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Mode {
@@ -331,8 +337,8 @@ impl RequestMatch for Mock {
     }
 
     fn priority(&self) -> u8 {
-        let form_count = if !self.when.form_data.is_empty() { 1 } else { 0 };
-        form_count
+        
+        if !self.when.form_data.is_empty() { 1 } else { 0 }
     }
 }
 

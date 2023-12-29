@@ -16,7 +16,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("Control Plane on http://127.0.0.1:{}/", control_plane.port);
     println!("Mock on http://127.0.0.1:{}/", mock.port);
 
-    let control_plane = run_controlplane(control_plane.listener, state.clone(), Mode::Proxy);
+    let control_plane = run_controlplane(control_plane.listener, state.clone());
     let mock = run_mock(mock.listener, state, Mode::Proxy);
     let (cp_result, mock_result) = join!(control_plane, mock);
 

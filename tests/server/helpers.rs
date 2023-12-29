@@ -16,11 +16,11 @@ pub(crate) async fn start_server(mode: Mode) -> ServerPorts {
         .unwrap();
 
     let state = SequentialState::new(mock.port);
-    let control_plane_server = run_controlplane(control_plane.listener, state.clone(), mode);
-    let _ = tokio::spawn(control_plane_server);
+    let control_plane_server = run_controlplane(control_plane.listener, state.clone());
+    tokio::spawn(control_plane_server);
 
     let proxy_server = run_mock(mock.listener, state, mode);
-    let _ = tokio::spawn(proxy_server);
+    tokio::spawn(proxy_server);
 
     ServerPorts {
         control_plane: control_plane.port,
