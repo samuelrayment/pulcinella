@@ -51,9 +51,11 @@ where
         for mock in mocks {
             if mock.matches(&req) {
                 let builder = Response::builder().status(mock.then.status);
-                let builder = mock.then.headers.iter().fold(builder, |builder, (k, v)| {
-                    builder.header(k, v)
-                });
+                let builder = mock
+                    .then
+                    .headers
+                    .iter()
+                    .fold(builder, |builder, (k, v)| builder.header(k, v));
                 return Ok(builder
                     .body(Full::new(Bytes::from(mock.then.body.clone())))
                     .unwrap());
@@ -329,26 +331,21 @@ impl RequestMatch for Mock {
     }
 
     fn priority(&self) -> u8 {
-        let form_count = if self.when.form_data.is_some() { 1 } else { 0 };
+        let form_count = if !self.when.form_data.is_empty() { 1 } else { 0 };
         form_count
     }
 }
 
 impl Mock {
     fn check_params_match(&self, req: &UnpackedRequest) -> bool {
-        let params_match = if let Some(form_data) = &self.when.form_data {
-            let params = form_urlencoded::parse(req.body.as_ref())
-                .into_owned()
-                .collect::<HashMap<String, String>>();
-            let correct_param_count = params.len() == form_data.len();
-            let correct_params = form_data
-                .iter()
-                .all(|(key, value)| params.get(key).map(|v| v == value).unwrap_or(false));
-            correct_param_count && correct_params
-        } else {
-            true
-        };
-        params_match
+        let params = form_urlencoded::parse(req.body.as_ref())
+            .into_owned()
+            .collect::<HashMap<String, String>>();
+        let correct_param_count = params.len() == self.when.form_data.len();
+        let correct_params = self.when.form_data
+            .iter()
+            .all(|(key, value)| params.get(key).map(|v| v == value).unwrap_or(false));
+        correct_param_count && correct_params
     }
 }
 

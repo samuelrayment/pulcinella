@@ -25,7 +25,7 @@ pub struct Mock {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct WhenState {
     pub match_path: String,
-    pub form_data: Option<Vec<(String, String)>>,
+    pub form_data: Vec<(String, String)>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

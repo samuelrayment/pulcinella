@@ -115,7 +115,8 @@ async fn should_respond_with_404_for_matched_path_and_unmatched_form_data() {
     mock_client
         .when(|when| {
             when.path(&server_path)
-                .form_data(&[(form_name, form_value), (form_name2, form_value2)])
+                .form_data(&form_name, &form_value)
+                .form_data(&form_name2, &form_value2)
         })
         .then(|then| then.status(200))
         .send()
@@ -145,10 +146,9 @@ async fn should_respond_with_200_for_matched_path_and_matched_form_data() {
 
     mock_client
         .when(|when| {
-            when.path(&server_path).form_data(&[
-                (form_name.clone(), form_value.clone()),
-                (form_name2.clone(), form_value2.clone()),
-            ])
+            when.path(&server_path)
+                .form_data(&form_name, &form_value)
+                .form_data(&form_name2, &form_value2)
         })
         .then(|then| then.status(200))
         .send()
@@ -186,10 +186,9 @@ async fn should_respond_with_the_most_specific_mock() {
     // more specific mock
     mock_client
         .when(|when| {
-            when.path(&server_path).form_data(&[
-                (form_name.clone(), form_value.clone()),
-                (form_name2.clone(), form_value2.clone()),
-            ])
+            when.path(&server_path)
+                .form_data(&form_name, &form_value)
+                .form_data(&form_name2, &form_value2)
         })
         .then(|then| then.status(201))
         .send()
@@ -259,7 +258,11 @@ async fn should_respond_with_a_body() {
     assert_eq!(body, client.text().await.unwrap());
 }
 
-fn assert_header(response: reqwest::Response, header_name: impl AsRef<str>, header_value: impl AsRef<str>) {
+fn assert_header(
+    response: reqwest::Response,
+    header_name: impl AsRef<str>,
+    header_value: impl AsRef<str>,
+) {
     assert_eq!(
         header_value.as_ref().as_bytes(),
         response

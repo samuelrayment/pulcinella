@@ -109,14 +109,14 @@ impl<'a> MockBuilder<'a, WhenThenState> {
 
 pub struct WhenBuilder {
     match_path: String,
-    form_data: Option<Vec<(String, String)>>,
+    form_data: Vec<(String, String)>,
 }
 
 impl Default for WhenBuilder {
     fn default() -> Self {
         Self {
             match_path: String::from(""),
-            form_data: None,
+            form_data: vec![],
         }
     }
 }
@@ -127,8 +127,11 @@ impl WhenBuilder {
         self
     }
 
-    pub fn form_data(mut self, form_data: &[(String, String)]) -> Self {
-        self.form_data = Some(form_data.to_vec());
+    pub fn form_data(mut self, name: impl AsRef<str>, value: impl AsRef<str>) -> Self {
+        self.form_data.push((
+            name.as_ref().to_string(),
+            value.as_ref().to_string(),
+        ));
         self
     }
 
