@@ -1,7 +1,7 @@
 
 use thiserror::Error;
 
-use crate::interchange::{Command, InstanceId, Mock, ThenState, WhenState};
+use crate::interchange::{Command, InstanceId, MockRule, ThenState, WhenState};
 
 pub struct Client {
     control_plane_url: String,
@@ -80,7 +80,7 @@ impl<'a> MockBuilder<'a, WhenThenState> {
     // TODO should this return an ID to be used to delete the mock?
     pub async fn send(self) -> Result<(), ClientError> {
         let mock = Command::InstallMock {
-            mock: Mock {
+            mock: MockRule {
                 when: self.state.when_state,
                 then: self.state.then_state,
             },

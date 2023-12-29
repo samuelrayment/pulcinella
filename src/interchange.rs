@@ -4,7 +4,7 @@ use serde_derive::{Deserialize, Serialize};
 #[derive(Deserialize, Serialize, Debug)]
 pub enum Command {
     CreateInstance,
-    InstallMock { instance: InstanceId, mock: Mock },
+    InstallMock { instance: InstanceId, mock: MockRule },
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -22,7 +22,7 @@ pub enum InstallError {
 pub struct InstanceId(pub(crate) String);
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Mock {
+pub struct MockRule {
     pub when: WhenState,
     pub then: ThenState,
 }

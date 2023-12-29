@@ -16,7 +16,7 @@ use tokio::{
     sync::RwLock,
 };
 
-use crate::interchange::{Command, InstanceId, InstanceResponse, Mock, InstallError};
+use crate::interchange::{Command, InstanceId, InstanceResponse, MockRule, InstallError};
 
 pub async fn control_handler<T>(
     req: Request<T>,
@@ -301,7 +301,7 @@ pub async fn run_mock(
     }
 }
 
-type Instance = Arc<RwLock<Option<(InstanceId, Vec<Mock>)>>>;
+type Instance = Arc<RwLock<Option<(InstanceId, Vec<MockRule>)>>>;
 
 #[derive(Debug, Clone)]
 pub struct SequentialState {
@@ -329,7 +329,7 @@ trait RequestMatch {
     fn priority(&self) -> u8;
 }
 
-impl RequestMatch for Mock {
+impl RequestMatch for MockRule {
     fn matches(&self, req: &UnpackedRequest) -> bool {
         let params_match = self.check_params_match(req);
 
@@ -342,7 +342,7 @@ impl RequestMatch for Mock {
     }
 }
 
-impl Mock {
+impl MockRule {
     fn check_params_match(&self, req: &UnpackedRequest) -> bool {
         let params = form_urlencoded::parse(req.body.as_ref())
             .into_owned()
