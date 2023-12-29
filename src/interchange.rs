@@ -23,12 +23,12 @@ pub struct InstanceId(pub(crate) String);
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct MockRule {
-    pub when: WhenState,
+    pub when: WhenRules,
     pub then: ThenState,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct WhenState {
+pub struct WhenRules {
     pub match_path: String,
     pub form_data: Vec<(String, String)>,
 }

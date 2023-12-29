@@ -1,7 +1,7 @@
 
 use thiserror::Error;
 
-use crate::interchange::{Command, InstanceId, MockRule, ThenState, WhenState};
+use crate::interchange::{Command, InstanceId, MockRule, ThenState, WhenRules};
 
 pub struct Client {
     control_plane_url: String,
@@ -40,7 +40,7 @@ impl Client {
         })
     }
 
-    pub fn when<F>(&self, when: F) -> MockBuilder<WhenState>
+    pub fn when<F>(&self, when: F) -> MockBuilder<WhenRules>
     where
         F: FnOnce(WhenBuilder) -> WhenBuilder,
     {
@@ -64,7 +64,7 @@ pub struct MockBuilder<'a, State> {
     client: &'a Client,
 }
 
-impl<'a> MockBuilder<'a, WhenState> {
+impl<'a> MockBuilder<'a, WhenRules> {
     pub fn then<F>(self, then: F) -> MockBuilder<'a, WhenThenState>
     where
         F: FnOnce(ThenBuilder) -> ThenBuilder,
@@ -81,7 +81,7 @@ impl<'a> MockBuilder<'a, WhenThenState> {
     pub async fn send(self) -> Result<(), ClientError> {
         let mock = Command::InstallMock {
             mock: MockRule {
-                when: self.state.when_state,
+                when: self.state.when_rules,
                 then: self.state.then_state,
             },
             instance: self.client.instance.clone(),
@@ -131,8 +131,8 @@ impl WhenBuilder {
         self
     }
 
-    fn build(self) -> WhenState {
-        WhenState {
+    fn build(self) -> WhenRules {
+        WhenRules {
             match_path: self.match_path,
             form_data: self.form_data,
         }
@@ -169,21 +169,21 @@ impl ThenBuilder {
         self
     }
 
-    fn build(self, when_state: WhenState) -> WhenThenState {
+    fn build(self, when_rules: WhenRules) -> WhenThenState {
         let then_state = ThenState {
             status: self.status,
             headers: self.headers,
             body: self.body,
         };
         WhenThenState {
-            when_state,
+            when_rules,
             then_state,
         }
     }
 }
 
 pub struct WhenThenState {
-    when_state: WhenState,
+    when_rules: WhenRules,
     then_state: ThenState,
 }
 
