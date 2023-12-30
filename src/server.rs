@@ -28,10 +28,7 @@ where
 {
     match (req.method(), req.uri().path()) {
         (&hyper::Method::POST, "/") => handle_control_plane(req, state).await,
-        _ => Ok(Response::builder()
-            .status(404)
-            .body(Full::new(Bytes::from_static(b"Not Found")))
-            .unwrap()),
+        _ => respond(404, "Not Found"),
     }
 }
 
@@ -70,10 +67,7 @@ where
                 .or_else(|e| e.to_response()),
             Err(e) => e.to_response(),
         },
-        Mode::Mock => Ok(Response::builder()
-            .status(404)
-            .body(Full::new(Bytes::from_static(b"Not Found")))
-            .unwrap()),
+        Mode::Mock => respond(404, "Not Found"),
     }
 }
 
@@ -143,30 +137,20 @@ enum ProxyError {
 impl ProxyError {
     fn to_response(&self) -> Result<Response<Full<Bytes>>, Infallible> {
         match self {
-            ProxyError::BadHostHeader => Self::generate_response(400, "Bad host header"),
-            ProxyError::UpstreamNotFound => Self::generate_response(502, "Upstream not found"),
-            ProxyError::UpstreamNotHttp => Self::generate_response(502, "Upstream not HTTP"),
+            ProxyError::BadHostHeader => respond(400, "Bad host header"),
+            ProxyError::UpstreamNotFound => respond(502, "Upstream not found"),
+            ProxyError::UpstreamNotHttp => respond(502, "Upstream not HTTP"),
             ProxyError::CannotReadRequestBody => {
-                Self::generate_response(502, "Cannot read request body")
+                respond(502, "Cannot read request body")
             }
-            ProxyError::UpstreamSendError => Self::generate_response(502, "Upstream send error"),
+            ProxyError::UpstreamSendError => respond(502, "Upstream send error"),
             ProxyError::CannotReadResponseBody => {
-                Self::generate_response(502, "Cannot read response body")
+                respond(502, "Cannot read response body")
             }
             ProxyError::CannotConstructResponseBody => {
-                Self::generate_response(502, "Cannot construct response body")
+                respond(502, "Cannot construct response body")
             }
         }
-    }
-
-    fn generate_response(
-        status: u16,
-        message: &'static str,
-    ) -> Result<Response<Full<Bytes>>, Infallible> {
-        Ok(Response::builder()
-            .status(status)
-            .body(Full::new(Bytes::from(message)))
-            .unwrap())
     }
 }
 
@@ -214,20 +198,12 @@ where
                 instance: instance_id,
                 url: format!("http://localhost:{}", state.mock_port),
             };
-            Ok(Response::builder()
-                .status(200)
-                .body(Full::new(Bytes::from(
-                    serde_json::to_string(&instance_response).unwrap(),
-                )))
-                .unwrap())
+            respond(200, serde_json::to_string(&instance_response).unwrap())
         }
         Command::InstallMock { mock, instance: instance_id } => {
             if instance_id != state.instance.read().await.as_ref().unwrap().0 {
                 let body = serde_json::to_string(&InstallError::InstanceNotFound).unwrap();
-                return Ok(Response::builder()
-                    .status(400)
-                    .body(Full::new(Bytes::from(body)))
-                    .unwrap());
+                return respond(400, body);
             }
 
             let mut instance = state.instance.write().await;
@@ -236,12 +212,16 @@ where
                 mocks.sort_by_key(|m| m.priority());
                 mocks.reverse();
             }
-            Ok(Response::builder()
-                .status(200)
-                .body(Full::new(Bytes::from("")))
-                .unwrap())
+            respond(200, "")
         }
     }
+}
+
+fn respond(status: u16, body: impl Into<Bytes>) -> Result<Response<Full<Bytes>>, Infallible> {
+    Ok(Response::builder()
+        .status(status)
+        .body(Full::new(body.into()))
+        .unwrap())
 }
 
 pub struct SocketBinding {
