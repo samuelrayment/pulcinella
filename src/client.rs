@@ -1,6 +1,5 @@
-use thiserror::Error;
-
-use crate::interchange::{Command, InstanceId, MockRule, ThenState, WhenRules};
+use crate::interchange::{Command, InstanceId, WhenRules};
+pub use crate::shared_client::*;
 
 pub struct Client {
     control_plane_url: String,
@@ -39,7 +38,20 @@ impl Client {
         })
     }
 
-    pub(crate) async fn send_command(&self, command: Command) -> Result<(), ClientError> {
+    pub fn when<F>(&self, when: F) -> MockBuilder<WhenRules, Client>
+    where
+        F: FnOnce(WhenBuilder) -> WhenBuilder,
+    {
+        MockBuilder::new(self, when(WhenBuilder::default()).build())
+    }
+
+    pub fn url(&self) -> String {
+        self.mock_url.clone()
+    }
+}
+
+impl MockClient for Client {
+    async fn send_command(&self, command: Command) -> Result<(), ClientError> {
         let _body = reqwest::Client::new()
             .post(&self.control_plane_url)
             .body(serde_json::to_string(&command).unwrap())
@@ -61,140 +73,7 @@ impl Client {
         Ok(())
     }
 
-    pub fn when<F>(&self, when: F) -> MockBuilder<WhenRules>
-    where
-        F: FnOnce(WhenBuilder) -> WhenBuilder,
-    {
-        MockBuilder {
-            state: when(WhenBuilder::default()).build(),
-            client: self,
-        }
+    fn instance(&self) -> &InstanceId {
+        &self.instance
     }
-
-    pub fn url(&self) -> String {
-        self.mock_url.clone()
-    }
-}
-
-pub enum Method {
-    GET,
-}
-
-pub struct MockBuilder<'a, State> {
-    state: State,
-    client: &'a Client,
-}
-
-impl<'a> MockBuilder<'a, WhenRules> {
-    pub fn then<F>(self, then: F) -> MockBuilder<'a, WhenThenState>
-    where
-        F: FnOnce(ThenBuilder) -> ThenBuilder,
-    {
-        MockBuilder {
-            state: then(ThenBuilder::new()).build(self.state),
-            client: self.client,
-        }
-    }
-}
-
-impl<'a> MockBuilder<'a, WhenThenState> {
-    // TODO should this return an ID to be used to delete the mock?
-    pub async fn send(self) -> Result<(), ClientError> {
-        let mock = Command::InstallMock {
-            mock: MockRule {
-                when: self.state.when_rules,
-                then: self.state.then_state,
-            },
-            instance: self.client.instance.clone(),
-        };
-        self.client.send_command(mock).await
-    }
-}
-
-#[derive(Default)]
-pub struct WhenBuilder {
-    match_path: String,
-    form_data: Vec<(String, String)>,
-}
-
-impl WhenBuilder {
-    pub fn path(mut self, path: &str) -> Self {
-        self.match_path = String::from(path);
-        self
-    }
-
-    pub fn form_data(mut self, name: impl AsRef<str>, value: impl AsRef<str>) -> Self {
-        self.form_data.push((
-            name.as_ref().to_string(),
-            value.as_ref().to_string(),
-        ));
-        self
-    }
-
-    fn build(self) -> WhenRules {
-        WhenRules {
-            match_path: self.match_path,
-            form_data: self.form_data,
-        }
-    }
-}
-
-pub struct ThenBuilder {
-    status: u16,
-    headers: Vec<(String, String)>,
-    body: Vec<u8>,
-}
-
-impl ThenBuilder {
-    fn new() -> Self {
-        Self {
-            status: 0,
-            headers: vec![],
-            body: vec![],
-        }
-    }
-
-    pub fn status(mut self, status: u16) -> Self {
-        self.status = status;
-        self
-    }
-
-    pub fn header(mut self, name: &str, value: &str) -> Self {
-        self.headers.push((String::from(name), String::from(value)));
-        self
-    }
-
-    pub fn body(mut self, body: impl Into<Vec<u8>>) -> Self {
-        self.body = body.into();
-        self
-    }
-
-    fn build(self, when_rules: WhenRules) -> WhenThenState {
-        let then_state = ThenState {
-            status: self.status,
-            headers: self.headers,
-            body: self.body,
-        };
-        WhenThenState {
-            when_rules,
-            then_state,
-        }
-    }
-}
-
-pub struct WhenThenState {
-    when_rules: WhenRules,
-    then_state: ThenState,
-}
-
-#[derive(Error, Debug, PartialEq)]
-pub enum ClientError {
-    #[error("Failed to start mock client")]
-    FailedToConnectToMockServer,
-    #[error("Failed to create test instance")]
-    FailedToCreateTestInstance,
-    #[error("Mock instance has been replaced with a new instance")]
-    InstanceNoLongerValid,
-    #[error("Failed to install mock rule into server")]
-    FailedToInstallMockRule,
 }
