@@ -39,6 +39,28 @@ impl Client {
         })
     }
 
+    pub(crate) async fn send_command(&self, command: Command) -> Result<(), ClientError> {
+        let _body = reqwest::Client::new()
+            .post(&self.control_plane_url)
+            .body(serde_json::to_string(&command).unwrap())
+            .send()
+            .await
+            .map_err(|_| ClientError::FailedToConnectToMockServer)
+            .and_then(|res| {
+                if res.status().is_success() {
+                    Ok(res)
+                } else if res.status().is_client_error() {
+                    Err(ClientError::InstanceNoLongerValid)
+                } else {
+                    Err(ClientError::FailedToInstallMockRule)
+                }
+            })?
+            .text()
+            .await
+            .map_err(|_| ClientError::FailedToConnectToMockServer)?;
+        Ok(())
+    }
+
     pub fn when<F>(&self, when: F) -> MockBuilder<WhenRules>
     where
         F: FnOnce(WhenBuilder) -> WhenBuilder,
@@ -85,26 +107,7 @@ impl<'a> MockBuilder<'a, WhenThenState> {
             },
             instance: self.client.instance.clone(),
         };
-        let _body = reqwest::Client::new()
-            .post(&self.client.control_plane_url)
-            .body(serde_json::to_string(&mock).unwrap())
-            .send()
-            .await
-            .map_err(|_| ClientError::FailedToConnectToMockServer)
-            .and_then(|res| {
-                if res.status().is_success() {
-                    Ok(res)
-                } else if res.status().is_client_error() {
-                    Err(ClientError::InstanceNoLongerValid)
-                } else {
-                    Err(ClientError::FailedToCreateTestInstance)
-                }
-            })?
-            .text()
-            .await
-            .map_err(|_| ClientError::FailedToConnectToMockServer)?;
-
-        Ok(())
+        self.client.send_command(mock).await
     }
 }
 
@@ -192,4 +195,6 @@ pub enum ClientError {
     FailedToCreateTestInstance,
     #[error("Mock instance has been replaced with a new instance")]
     InstanceNoLongerValid,
+    #[error("Failed to install mock rule into server")]
+    FailedToInstallMockRule,
 }
