@@ -1,6 +1,7 @@
 use std::{collections::HashMap, convert::Infallible, net::SocketAddr, sync::Arc};
 
 use crate::interchange::{Command, InstallError, InstanceId, InstanceResponse, MockRule};
+use eyre::{eyre, WrapErr};
 use http_body_util::{BodyExt, Full};
 use hyper::{
     body::{Body, Bytes},
@@ -179,8 +180,9 @@ where
     T: Body,
     T::Error: std::fmt::Debug,
 {
-    let body = req.into_body().collect().await.unwrap().to_bytes();
-    let command = serde_json::from_slice::<Command>(&body).unwrap();
+    let Ok(command) = process_command_body(req).await else {
+        return respond(400, "Bad Request");
+    };
     match command {
         Command::CreateInstance => {
             let instance_id = InstanceId(uuid7::uuid7().to_string());
@@ -216,6 +218,22 @@ where
     }
 }
 
+async fn process_command_body<T>(req: Request<T>) -> Result<Command, eyre::Report>
+where
+    T: Body,
+    T::Error: std::fmt::Debug,
+{
+    let body = req
+        .into_body()
+        .collect()
+        .await
+        .map_err(|_| eyre!("Cannot read body"))?
+        .to_bytes();
+    let command = serde_json::from_slice::<Command>(&body).wrap_err("Invalid command sent")?;
+
+    Ok(command)
+}
+
 fn respond(status: u16, body: impl Into<Bytes>) -> Result<Response<Full<Bytes>>, Infallible> {
     Ok(Response::builder()
         .status(status)
@@ -247,7 +265,10 @@ pub async fn run_controlplane(
 
         tokio::task::spawn(async move {
             if let Err(err) = http1::Builder::new()
-                .serve_connection(io, service_fn(move |req| control_handler(req, state.clone())))
+                .serve_connection(
+                    io,
+                    service_fn(move |req| control_handler(req, state.clone())),
+                )
                 .await
             {
                 println!("Error serving connection: {:?}", err);
