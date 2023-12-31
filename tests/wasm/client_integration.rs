@@ -7,14 +7,12 @@ wasm_bindgen_test_configure!(run_in_browser);
 #[wasm_bindgen_test]
 async fn should_return_200_for_mocked_path() {
     let path = format!("/matched-path");
-    console_log!("a");
     let mock_client = Client::new("http://localhost:3000")
         .await
         .expect("mock client failed to start");
-    console_log!("b");
     mock_client
         .when(|when| when.path(&path))
-        .then(|then| then.status(200).body("Hello World"))
+        .then(|then| then.status(200))
         .send()
         .await
         .expect("Failed to install mock");
