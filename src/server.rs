@@ -1,7 +1,6 @@
-use std::{
-    collections::HashMap, convert::Infallible, net::SocketAddr, sync::Arc,
-};
+use std::{collections::HashMap, convert::Infallible, net::SocketAddr, sync::Arc};
 
+use crate::interchange::{Command, InstallError, InstanceId, InstanceResponse, MockRule};
 use http_body_util::{BodyExt, Full};
 use hyper::{
     body::{Body, Bytes},
@@ -15,9 +14,9 @@ use tokio::{
     net::{TcpListener, TcpStream},
     sync::RwLock,
 };
+use tracing::info;
 
-use crate::interchange::{Command, InstanceId, InstanceResponse, MockRule, InstallError};
-
+#[tracing::instrument(skip(req, state))]
 pub async fn control_handler<T>(
     req: Request<T>,
     state: SequentialState,
@@ -74,7 +73,6 @@ where
 async fn request_from_proxy(
     req: UnpackedRequest,
 ) -> Result<Response<hyper::body::Incoming>, ProxyError> {
-    println!("Request: {:?}", req);
     let url = req
         .headers
         .get("host")
@@ -140,13 +138,9 @@ impl ProxyError {
             ProxyError::BadHostHeader => respond(400, "Bad host header"),
             ProxyError::UpstreamNotFound => respond(502, "Upstream not found"),
             ProxyError::UpstreamNotHttp => respond(502, "Upstream not HTTP"),
-            ProxyError::CannotReadRequestBody => {
-                respond(502, "Cannot read request body")
-            }
+            ProxyError::CannotReadRequestBody => respond(502, "Cannot read request body"),
             ProxyError::UpstreamSendError => respond(502, "Upstream send error"),
-            ProxyError::CannotReadResponseBody => {
-                respond(502, "Cannot read response body")
-            }
+            ProxyError::CannotReadResponseBody => respond(502, "Cannot read response body"),
             ProxyError::CannotConstructResponseBody => {
                 respond(502, "Cannot construct response body")
             }
@@ -198,9 +192,13 @@ where
                 instance: instance_id,
                 url: format!("http://localhost:{}", state.mock_port),
             };
+            info!("Created instance {:?}", instance_response);
             respond(200, serde_json::to_string(&instance_response).unwrap())
         }
-        Command::InstallMock { mock, instance: instance_id } => {
+        Command::InstallMock {
+            mock,
+            instance: instance_id,
+        } => {
             if instance_id != state.instance.read().await.as_ref().unwrap().0 {
                 let body = serde_json::to_string(&InstallError::InstanceNotFound).unwrap();
                 return respond(400, body);
@@ -212,6 +210,7 @@ where
                 mocks.sort_by_key(|m| m.priority());
                 mocks.reverse();
             }
+            info!("Mock installed");
             respond(200, "")
         }
     }
@@ -239,7 +238,7 @@ pub async fn bind_socket(
 
 pub async fn run_controlplane(
     listener: TcpListener,
-    state: SequentialState
+    state: SequentialState,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     loop {
         let state = state.clone();
@@ -317,8 +316,11 @@ impl RequestMatch for MockRule {
     }
 
     fn priority(&self) -> u8 {
-        
-        if !self.when.form_data.is_empty() { 1 } else { 0 }
+        if !self.when.form_data.is_empty() {
+            1
+        } else {
+            0
+        }
     }
 }
 
@@ -328,7 +330,9 @@ impl MockRule {
             .into_owned()
             .collect::<HashMap<String, String>>();
         let correct_param_count = params.len() == self.when.form_data.len();
-        let correct_params = self.when.form_data
+        let correct_params = self
+            .when
+            .form_data
             .iter()
             .all(|(key, value)| params.get(key).map(|v| v == value).unwrap_or(false));
         correct_param_count && correct_params
