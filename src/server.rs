@@ -6,7 +6,6 @@ use http_body_util::{BodyExt, Full};
 use hyper::{
     body::{Body, Bytes},
     server::conn::http1,
-    service::service_fn,
     Request, Response,
 };
 use hyper_util::{rt::TokioIo, service::TowerToHyperService};
@@ -200,9 +199,7 @@ where
     trace!("command: {command:?}");
     match command {
         Command::CreateInstance => {
-            info!("AA");
             let instance_id = InstanceId(uuid7::uuid7().to_string());
-            info!("AB");
             {
                 info!("attempt to lock: {:?}", state.instance.try_write());
                 let mut instance = state.instance.write().await;
