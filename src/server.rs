@@ -48,6 +48,7 @@ where
     if let Some((_, mocks)) = instance.as_ref() {
         for mock in mocks {
             if mock.matches(&req) {
+                info!(rule=?mock.when, "Found matching mock rule");
                 let builder = Response::builder().status(mock.then.status);
                 let builder = mock
                     .then
@@ -65,6 +66,10 @@ where
         Mode::Proxy => match request_from_proxy(req).await {
             Ok(res) => proxy_response_to_response(res)
                 .await
+                .map(|res| {
+                    info!(response=?res, "Proxying response");
+                    res
+                })
                 .or_else(|e| e.to_response()),
             Err(e) => e.to_response(),
         },
