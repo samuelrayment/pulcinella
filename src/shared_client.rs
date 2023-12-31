@@ -5,10 +5,7 @@ use thiserror::Error;
 use crate::interchange::{Command, InstanceId, MockRule, ThenState, WhenRules};
 
 pub trait MockClient {
-    fn send_command(
-        &self,
-        command: Command,
-    ) -> impl Future<Output = Result<(), ClientError>> + Send;
+    fn send_command(&self, command: Command) -> impl Future<Output = Result<(), ClientError>>;
     fn instance(&self) -> &InstanceId;
 }
 

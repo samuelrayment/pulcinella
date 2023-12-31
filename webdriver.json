@@ -1,0 +1,10 @@
+{
+  "goog:chromeOptions": {
+    "args": [
+      "--use-fake-device-for-media-stream",
+      "--use-fake-ui-for-media-stream",
+      "--proxy-bypass-list=<-loopback>",
+      "--proxy-server=127.0.0.1:3001"
+    ]
+  }
+}

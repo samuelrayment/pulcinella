@@ -5,3 +5,5 @@ pub mod interchange;
 pub mod server;
 #[cfg(feature = "client")]
 pub(crate) mod shared_client;
+#[cfg(all(feature = "client", any(target_arch = "wasm32", rust_analyzer)))]
+pub mod wasm_client;

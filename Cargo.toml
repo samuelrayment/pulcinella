@@ -18,6 +18,8 @@ serde_derive = "1.0"
 serde_json = "1.0"
 thiserror = "1.0.51"
 tokio = { version = "1", features = ["full"], optional = true }
+tower = { version = "0.4.3" }
+tower-http = { version = "0.5.0", features = ["cors"] }
 tracing = { version = "0.1.40", optional = true }
 tracing-subscriber = { version = "0.3.0", features=["env-filter"], optional = true }
 uuid7 = { version = "0.7.2", optional = true }

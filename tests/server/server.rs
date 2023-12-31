@@ -159,6 +159,7 @@ async fn should_respond_with_upstream_for_different_path() {
     assert_eq!("hello", response.text().await.unwrap());
 }
 
+
 async fn setup_server() -> reqwest::Client {
     let server_ports = start_server(Mode::Proxy).await;
     create_client(server_ports.mock)
@@ -166,7 +167,7 @@ async fn setup_server() -> reqwest::Client {
 
 fn create_client(server_port: u16) -> reqwest::Client {
     let proxy = reqwest::Proxy::http(format!("http://localhost:{}/", server_port)).unwrap();
-
+    
     reqwest::ClientBuilder::new().proxy(proxy).build().unwrap()
 }
 

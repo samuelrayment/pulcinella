@@ -9,15 +9,17 @@ use hyper::{
     service::service_fn,
     Request, Response,
 };
-use hyper_util::rt::TokioIo;
+use hyper_util::{rt::TokioIo, service::TowerToHyperService};
 use thiserror::Error;
 use tokio::{
     net::{TcpListener, TcpStream},
     sync::RwLock,
 };
-use tracing::info;
+use tower::ServiceBuilder;
+use tower_http::cors::CorsLayer;
+use tracing::{info, trace};
 
-#[tracing::instrument(skip(state), level = "trace")]
+#[tracing::instrument(skip(state, req), level = "trace", fields(http.method=%req.method(), http.uri=%req.uri()))]
 pub async fn control_handler<T>(
     req: Request<T>,
     state: SequentialState,
@@ -32,7 +34,7 @@ where
     }
 }
 
-#[tracing::instrument(skip(state, mode), level = "trace")]
+#[tracing::instrument(skip(state, mode, req), level = "info", fields(http.method=%req.method(), http.uri=%req.uri()))]
 async fn mock_handler<T>(
     req: Request<T>,
     state: SequentialState,
@@ -42,22 +44,24 @@ where
     T: Body + std::fmt::Debug,
     T::Error: std::fmt::Debug,
 {
-    let instance = state.instance.read().await;
     let req = UnpackedRequest::from_request(req).await;
+    {
+        let instance = state.instance.read().await;
 
-    if let Some((_, mocks)) = instance.as_ref() {
-        for mock in mocks {
-            if mock.matches(&req) {
-                info!(rule=?mock.when, "Found matching mock rule");
-                let builder = Response::builder().status(mock.then.status);
-                let builder = mock
-                    .then
-                    .headers
-                    .iter()
-                    .fold(builder, |builder, (k, v)| builder.header(k, v));
-                return Ok(builder
-                    .body(Full::new(Bytes::from(mock.then.body.clone())))
-                    .unwrap());
+        if let Some((_, mocks)) = instance.as_ref() {
+            for mock in mocks {
+                if mock.matches(&req) {
+                    info!("Found matching mock rule");
+                    let builder = Response::builder().status(mock.then.status);
+                    let builder = mock
+                        .then
+                        .headers
+                        .iter()
+                        .fold(builder, |builder, (k, v)| builder.header(k, v));
+                    return Ok(builder
+                        .body(Full::new(Bytes::from(mock.then.body.clone())))
+                        .unwrap());
+                }
             }
         }
     }
@@ -67,7 +71,7 @@ where
             Ok(res) => proxy_response_to_response(res)
                 .await
                 .map(|res| {
-                    info!(response=?res, "Proxying response");
+                    info!("Proxying response");
                     res
                 })
                 .or_else(|e| e.to_response()),
@@ -189,18 +193,22 @@ where
     let command = match parse_command(req).await {
         Ok(command) => command,
         Err(err) => {
-            info!(error=?err, "Cannot parse command");
+            info!(error=%err, "Cannot parse command");
             return respond(400, "Bad Request");
         }
     };
+    trace!("command: {command:?}");
     match command {
         Command::CreateInstance => {
+            info!("AA");
             let instance_id = InstanceId(uuid7::uuid7().to_string());
+            info!("AB");
             {
+                info!("attempt to lock: {:?}", state.instance.try_write());
                 let mut instance = state.instance.write().await;
                 *instance = Some((instance_id.clone(), vec![]));
             }
-            info!("Created instance {instance_id:?}");
+            info!(instance=?instance_id, "Created instance");
             let instance_response = InstanceResponse {
                 instance: instance_id,
                 url: format!("http://localhost:{}", state.mock_port),
@@ -217,12 +225,12 @@ where
             }
 
             let mut instance = state.instance.write().await;
+            info!("Mock installed: {:?}", mock.when);
             if let Some((_, mocks)) = instance.as_mut() {
                 mocks.push(mock);
                 mocks.sort_by_key(|m| m.priority());
                 mocks.reverse();
             }
-            info!("Mock installed");
             respond(200, "")
         }
     }
@@ -247,6 +255,7 @@ where
 fn respond(status: u16, body: impl Into<Bytes>) -> Result<Response<Full<Bytes>>, Infallible> {
     Ok(Response::builder()
         .status(status)
+        .header("Access-Control-Allow-Origin", "*")
         .body(Full::new(body.into()))
         .unwrap())
 }
@@ -274,11 +283,11 @@ pub async fn run_controlplane(
         let io = TokioIo::new(stream);
 
         tokio::task::spawn(async move {
+            let service = ServiceBuilder::new()
+                .layer(CorsLayer::permissive())
+                .service_fn(move |req| control_handler(req, state.clone()));
             if let Err(err) = http1::Builder::new()
-                .serve_connection(
-                    io,
-                    service_fn(move |req| control_handler(req, state.clone())),
-                )
+                .serve_connection(io, TowerToHyperService::new(service))
                 .await
             {
                 println!("Error serving connection: {:?}", err);
@@ -298,11 +307,11 @@ pub async fn run_mock(
         let io = TokioIo::new(stream);
 
         tokio::task::spawn(async move {
+            let service = ServiceBuilder::new()
+                .layer(CorsLayer::permissive())
+                .service_fn(move |req| mock_handler(req, state.clone(), mode));
             if let Err(err) = http1::Builder::new()
-                .serve_connection(
-                    io,
-                    service_fn(move |req| mock_handler(req, state.clone(), mode)),
-                )
+                .serve_connection(io, TowerToHyperService::new(service))
                 .await
             {
                 println!("Error serving connection: {:?}", err);
