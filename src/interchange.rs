@@ -1,10 +1,12 @@
-
 use serde_derive::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize, Debug)]
 pub enum Command {
     CreateInstance,
-    InstallMock { instance: InstanceId, mock: MockRule },
+    InstallMock {
+        instance: InstanceId,
+        mock: MockRule,
+    },
 }
 
 #[derive(Serialize, Deserialize, Debug)]

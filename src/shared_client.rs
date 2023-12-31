@@ -2,10 +2,13 @@ use std::future::Future;
 
 use thiserror::Error;
 
-use crate::interchange::{WhenRules, Command, MockRule, ThenState, InstanceId};
+use crate::interchange::{Command, InstanceId, MockRule, ThenState, WhenRules};
 
 pub trait MockClient {
-    fn send_command(&self, command: Command) -> impl Future<Output = Result<(), ClientError>> + Send;
+    fn send_command(
+        &self,
+        command: Command,
+    ) -> impl Future<Output = Result<(), ClientError>> + Send;
     fn instance(&self) -> &InstanceId;
 }
 
@@ -19,11 +22,10 @@ pub struct MockBuilder<'a, State, C: MockClient> {
 }
 
 impl<'a, C: MockClient> MockBuilder<'a, WhenRules, C> {
-    pub fn new(client: &'a C, when_rules: WhenRules) -> MockBuilder<'a, WhenRules, C>
-    {
+    pub fn new(client: &'a C, when_rules: WhenRules) -> MockBuilder<'a, WhenRules, C> {
         MockBuilder {
             state: when_rules,
-            client
+            client,
         }
     }
 }
@@ -67,10 +69,8 @@ impl WhenBuilder {
     }
 
     pub fn form_data(mut self, name: impl AsRef<str>, value: impl AsRef<str>) -> Self {
-        self.form_data.push((
-            name.as_ref().to_string(),
-            value.as_ref().to_string(),
-        ));
+        self.form_data
+            .push((name.as_ref().to_string(), value.as_ref().to_string()));
         self
     }
 

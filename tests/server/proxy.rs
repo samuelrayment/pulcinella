@@ -166,7 +166,7 @@ async fn setup_server() -> reqwest::Client {
 
 fn create_client(server_port: u16) -> reqwest::Client {
     let proxy = reqwest::Proxy::http(format!("http://localhost:{}/", server_port)).unwrap();
-    
+
     reqwest::ClientBuilder::new().proxy(proxy).build().unwrap()
 }
 

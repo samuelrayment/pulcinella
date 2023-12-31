@@ -17,7 +17,7 @@ use tokio::{
 };
 use tracing::info;
 
-#[tracing::instrument(skip(req, state))]
+#[tracing::instrument(skip(state), level = "trace")]
 pub async fn control_handler<T>(
     req: Request<T>,
     state: SequentialState,
@@ -32,6 +32,7 @@ where
     }
 }
 
+#[tracing::instrument(skip(state, mode), level = "trace")]
 async fn mock_handler<T>(
     req: Request<T>,
     state: SequentialState,
@@ -180,8 +181,12 @@ where
     T: Body,
     T::Error: std::fmt::Debug,
 {
-    let Ok(command) = process_command_body(req).await else {
-        return respond(400, "Bad Request");
+    let command = match parse_command(req).await {
+        Ok(command) => command,
+        Err(err) => {
+            info!(error=?err, "Cannot parse command");
+            return respond(400, "Bad Request");
+        }
     };
     match command {
         Command::CreateInstance => {
@@ -190,11 +195,11 @@ where
                 let mut instance = state.instance.write().await;
                 *instance = Some((instance_id.clone(), vec![]));
             }
+            info!("Created instance {instance_id:?}");
             let instance_response = InstanceResponse {
                 instance: instance_id,
                 url: format!("http://localhost:{}", state.mock_port),
             };
-            info!("Created instance {:?}", instance_response);
             respond(200, serde_json::to_string(&instance_response).unwrap())
         }
         Command::InstallMock {
@@ -218,7 +223,7 @@ where
     }
 }
 
-async fn process_command_body<T>(req: Request<T>) -> Result<Command, eyre::Report>
+async fn parse_command<T>(req: Request<T>) -> Result<Command, eyre::Report>
 where
     T: Body,
     T::Error: std::fmt::Debug,

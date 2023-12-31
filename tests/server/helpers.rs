@@ -1,6 +1,6 @@
 use std::net::SocketAddr;
 
-use wasm_test_server::server::{bind_socket, run_controlplane, Mode, run_mock, SequentialState};
+use wasm_test_server::server::{bind_socket, run_controlplane, run_mock, Mode, SequentialState};
 
 pub(crate) struct ServerPorts {
     pub(crate) control_plane: u16,
