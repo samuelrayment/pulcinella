@@ -1,5 +1,3 @@
-use std::future::Future;
-
 use thiserror::Error;
 
 use crate::{
@@ -37,7 +35,7 @@ impl Client {
         })
     }
 
-    pub fn when<F>(&self, when: F) -> MockBuilder<WhenRules, Client>
+    pub fn when<F>(&self, when: F) -> MockBuilder<WhenRules>
     where
         F: FnOnce(WhenBuilder) -> WhenBuilder,
     {
@@ -47,9 +45,7 @@ impl Client {
     pub fn url(&self) -> String {
         self.mock_url.clone()
     }
-}
 
-impl MockClient for Client {
     async fn send_command(&self, command: Command) -> Result<(), ClientError> {
         NetworkClient::send::<Command, InstallResponse, InstallError>(
             &self.control_plane_url,
@@ -64,24 +60,15 @@ impl MockClient for Client {
             _ => ClientError::FailedToConnectToMockServer,
         })
     }
-
-    fn instance(&self) -> &InstanceId {
-        &self.instance
-    }
 }
 
-pub trait MockClient {
-    fn send_command(&self, command: Command) -> impl Future<Output = Result<(), ClientError>>;
-    fn instance(&self) -> &InstanceId;
-}
-
-pub struct MockBuilder<'a, State, C: MockClient> {
+pub struct MockBuilder<'a, State> {
     state: State,
-    client: &'a C,
+    client: &'a Client,
 }
 
-impl<'a, C: MockClient> MockBuilder<'a, WhenRules, C> {
-    pub fn new(client: &'a C, when_rules: WhenRules) -> MockBuilder<'a, WhenRules, C> {
+impl<'a> MockBuilder<'a, WhenRules> {
+    pub fn new(client: &'a Client, when_rules: WhenRules) -> MockBuilder<'a, WhenRules> {
         MockBuilder {
             state: when_rules,
             client,
@@ -89,8 +76,8 @@ impl<'a, C: MockClient> MockBuilder<'a, WhenRules, C> {
     }
 }
 
-impl<'a, C: MockClient> MockBuilder<'a, WhenRules, C> {
-    pub fn then<F>(self, then: F) -> MockBuilder<'a, WhenThenState, C>
+impl<'a> MockBuilder<'a, WhenRules> {
+    pub fn then<F>(self, then: F) -> MockBuilder<'a, WhenThenState>
     where
         F: FnOnce(ThenBuilder) -> ThenBuilder,
     {
@@ -101,7 +88,7 @@ impl<'a, C: MockClient> MockBuilder<'a, WhenRules, C> {
     }
 }
 
-impl<'a, C: MockClient> MockBuilder<'a, WhenThenState, C> {
+impl<'a> MockBuilder<'a, WhenThenState> {
     // TODO should this return an ID to be used to delete the mock?
     pub async fn send(self) -> Result<(), ClientError> {
         let mock = Command::InstallMock {
@@ -109,7 +96,7 @@ impl<'a, C: MockClient> MockBuilder<'a, WhenThenState, C> {
                 when: self.state.when_rules,
                 then: self.state.then_state,
             },
-            instance: self.client.instance().clone(),
+            instance: self.client.instance.clone(),
         };
         self.client.send_command(mock).await
     }
