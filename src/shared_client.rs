@@ -142,15 +142,3 @@ pub enum ClientError {
     #[error("Failed to install mock rule into server")]
     FailedToInstallMockRule,
 }
-
-#[derive(Error, Debug, PartialEq)]
-pub enum ClientNetworkError<E> {
-    #[error("Failed to deserialize response")]
-    ResponseDeserializeError,
-    #[error("Response")]
-    Response(E),
-    #[error("Failed to connect to mock server")]
-    FailedToConnectToMockServer,
-    #[error("Failed to serialize command")]
-    FailedToSerializeCommand,
-}

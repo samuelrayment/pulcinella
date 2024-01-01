@@ -10,3 +10,4 @@ pub mod client;
 pub mod wasm_client;
 #[cfg(all(feature = "client", any(target_arch = "wasm32", rust_analyzer)))]
 pub use wasm_client as client;
+pub(crate) mod network_client;

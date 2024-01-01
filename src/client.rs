@@ -1,7 +1,10 @@
-use crate::interchange::{
-    Command, InstallError, InstallResponse, InstanceId, InstanceResponse, WhenRules,
-};
 pub use crate::shared_client::*;
+use crate::{
+    interchange::{
+        Command, InstallError, InstallResponse, InstanceId, InstanceResponse, WhenRules,
+    },
+    network_client::{ClientNetworkError, NetworkClient},
+};
 
 pub struct Client {
     control_plane_url: String,
@@ -16,11 +19,11 @@ impl Client {
             &Command::CreateInstance,
         )
         .await;
-        let response = body.map_err(|err| {
-            match err {
-                ClientNetworkError::FailedToConnectToMockServer => ClientError::FailedToConnectToMockServer,
-                _ => ClientError::FailedToCreateTestInstance,
+        let response = body.map_err(|err| match err {
+            ClientNetworkError::FailedToConnectToMockServer => {
+                ClientError::FailedToConnectToMockServer
             }
+            _ => ClientError::FailedToCreateTestInstance,
         })?;
 
         Ok(Self {
@@ -44,48 +47,21 @@ impl Client {
 
 impl MockClient for Client {
     async fn send_command(&self, command: Command) -> Result<(), ClientError> {
-        NetworkClient::send::<Command, InstallResponse, InstallError>(&self.control_plane_url, &command)
-            .await
-            .map(|_| ())
-            .map_err(|e| match e {
-                ClientNetworkError::Response(InstallError::InstanceNotFound) => {
-                    ClientError::InstanceNoLongerValid
-                }
-                _ => ClientError::FailedToConnectToMockServer,
-            })
+        NetworkClient::send::<Command, InstallResponse, InstallError>(
+            &self.control_plane_url,
+            &command,
+        )
+        .await
+        .map(|_| ())
+        .map_err(|e| match e {
+            ClientNetworkError::Response(InstallError::InstanceNotFound) => {
+                ClientError::InstanceNoLongerValid
+            }
+            _ => ClientError::FailedToConnectToMockServer,
+        })
     }
 
     fn instance(&self) -> &InstanceId {
         &self.instance
-    }
-}
-
-struct NetworkClient;
-
-impl NetworkClient {
-    async fn send<T, U, E>(control_plane_url: &str, message: &T) -> Result<U, ClientNetworkError<E>>
-    where
-        T: serde::Serialize,
-        U: serde::de::DeserializeOwned,
-        E: serde::de::DeserializeOwned,
-    {
-        let response = reqwest::Client::new()
-            .post(control_plane_url)
-            .json(message)
-            .send()
-            .await
-            .map_err(|_| ClientNetworkError::FailedToConnectToMockServer)?;
-        if response.status().is_success() {
-            response
-                .json::<U>()
-                .await
-                .map_err(|_| ClientNetworkError::ResponseDeserializeError)
-        } else {
-            response
-                .json::<E>()
-                .await
-                .map_err(|_| ClientNetworkError::ResponseDeserializeError)
-                .and_then(|e| Err(ClientNetworkError::Response(e)))
-        }
     }
 }

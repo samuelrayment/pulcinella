@@ -1,7 +1,6 @@
 pub use crate::shared_client::*;
-use gloo_net::http::Request;
 
-use crate::interchange::{Command, InstanceId, InstanceResponse, WhenRules, InstallResponse, InstallError};
+use crate::{interchange::{Command, InstanceId, InstanceResponse, WhenRules, InstallResponse, InstallError}, network_client::{ClientNetworkError, NetworkClient}};
 
 pub struct Client {
     control_plane_url: String,
@@ -57,35 +56,5 @@ impl MockClient for Client {
 
     fn instance(&self) -> &InstanceId {
         &self.instance
-    }
-}
-
-struct NetworkClient;
-
-impl NetworkClient {
-    async fn send<T, U, E>(control_plane_url: &str, message: &T) -> Result<U, ClientNetworkError<E>>
-    where
-        T: serde::Serialize,
-        U: serde::de::DeserializeOwned,
-        E: serde::de::DeserializeOwned,
-    {
-        let response = Request::post(control_plane_url)
-            .json(message)
-            .map_err(|_| ClientNetworkError::FailedToSerializeCommand)?
-            .send()
-            .await
-            .map_err(|_| ClientNetworkError::FailedToConnectToMockServer)?;
-        if response.status() >= 200 && response.status() < 300 {
-            response
-                .json()
-                .await
-                .map_err(|_| ClientNetworkError::ResponseDeserializeError)
-        } else {
-            response
-                .json::<E>()
-                .await
-                .map_err(|_| ClientNetworkError::ResponseDeserializeError)
-                .and_then(|e| Err(ClientNetworkError::Response(e)))
-        }
     }
 }
