@@ -1,10 +1,7 @@
 pub use crate::shared_client::*;
 use gloo_net::http::Request;
 
-use crate::{
-    client::{ClientError, MockClient},
-    interchange::{Command, InstanceId, InstanceResponse, WhenRules},
-};
+use crate::interchange::{Command, InstanceId, InstanceResponse, WhenRules};
 
 pub struct Client {
     control_plane_url: String,

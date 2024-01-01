@@ -1,6 +1,6 @@
 use gloo_net::http::Request;
 use wasm_bindgen_test::*;
-use wasm_test_server::wasm_client::Client;
+use wasm_test_server::client::Client;
 
 wasm_bindgen_test_configure!(run_in_browser);
 
