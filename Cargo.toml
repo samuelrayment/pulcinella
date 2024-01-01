@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 cfg-if = "1.0.0"
+clap = { version = "4.4", features = ["derive", "env"], optional = true }
 eyre = "0.6.11"
 form_urlencoded = "1"
 hyper = { version = "1.1.0", features = ["full"], optional = true }
@@ -40,6 +41,6 @@ bench = false
 required-features = ["server"]
 
 [features]
-server = ["dep:uuid7", "dep:tokio", "dep:hyper", "dep:http-body-util", "dep:hyper-util", "dep:tracing", "dep:tracing-subscriber"]
+server = ["dep:uuid7", "dep:clap", "dep:tokio", "dep:hyper", "dep:http-body-util", "dep:hyper-util", "dep:tracing", "dep:tracing-subscriber"]
 client = ["dep:reqwest"] 
 wasm-client = ["client", "dep:gloo-net", "gloo-net/http", "gloo-net/json"]
