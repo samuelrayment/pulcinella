@@ -1,7 +1,7 @@
 pub use crate::shared_client::*;
 use gloo_net::http::Request;
 
-use crate::interchange::{Command, InstanceId, InstanceResponse, WhenRules};
+use crate::interchange::{Command, InstanceId, InstanceResponse, WhenRules, InstallResponse};
 
 pub struct Client {
     control_plane_url: String,
@@ -43,14 +43,15 @@ impl Client {
 impl MockClient for Client {
     async fn send_command(&self, command: Command) -> Result<(), ClientError> {
         let url = self.control_plane_url.clone();
-        let _body = Request::post(&url)
+        let _body: InstallResponse = Request::post(&url)
             .json(&command)
             .map_err(|_| ClientError::FailedToConnectToMockServer)?
             .send()
             .await
             .map_err(|_| ClientError::FailedToConnectToMockServer)?
-            .text()
-            .await;
+            .json()
+            .await
+            .map_err(|_| ClientError::FailedToConnectToMockServer)?;
         Ok(())
     }
 

@@ -16,6 +16,9 @@ pub struct InstanceResponse {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct InstallResponse;
+
+#[derive(Serialize, Deserialize, Debug)]
 pub enum InstallError {
     InstanceNotFound,
 }

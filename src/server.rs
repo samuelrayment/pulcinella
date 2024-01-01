@@ -1,6 +1,6 @@
 use std::{collections::HashMap, convert::Infallible, net::SocketAddr, sync::Arc};
 
-use crate::interchange::{Command, InstallError, InstanceId, InstanceResponse, Method, MockRule};
+use crate::interchange::{Command, InstallError, InstanceId, InstanceResponse, Method, MockRule, InstallResponse};
 use eyre::{eyre, WrapErr};
 use http_body_util::{BodyExt, Full};
 use hyper::{
@@ -196,7 +196,7 @@ where
             return respond(400, "Bad Request");
         }
     };
-    trace!("command: {command:?}");
+    trace!("Received Command: {command:?}");
     match command {
         Command::CreateInstance => {
             let instance_id = InstanceId(uuid7::uuid7().to_string());
@@ -228,7 +228,7 @@ where
                 mocks.sort_by_key(|m| m.priority());
                 mocks.reverse();
             }
-            respond(200, "")
+            respond(200, serde_json::to_string(&InstallResponse).unwrap())
         }
     }
 }

@@ -306,6 +306,14 @@ async fn should_forget_old_mocks_when_new_client() {
     assert_eq!(response.status(), 404);
 }
 
+#[tokio::test]
+async fn should_return_failed_to_connect_when_server_not_running() {
+    let mock_client_resp = Client::new("http://localhost:9999")
+        .await;
+
+    assert_eq!(mock_client_resp.err(), Some(ClientError::FailedToConnectToMockServer));
+}
+
 fn assert_header(
     response: reqwest::Response,
     header_name: impl AsRef<str>,
