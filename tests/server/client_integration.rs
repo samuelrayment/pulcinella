@@ -1,6 +1,6 @@
 use fake::{Fake, Faker};
 
-use wasm_test_server::{
+use pulcinella::{
     client::{Client, ClientError},
     server::Mode,
 };

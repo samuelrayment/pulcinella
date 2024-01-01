@@ -804,6 +804,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "pulcinella"
+version = "0.1.0"
+dependencies = [
+ "cfg-if",
+ "eyre",
+ "fake",
+ "form_urlencoded",
+ "gloo-net",
+ "http-body-util",
+ "hyper 1.1.0",
+ "hyper-util",
+ "reqwest",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tower",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+ "uuid7",
+ "wasm-bindgen-test",
+]
+
+[[package]]
 name = "quote"
 version = "1.0.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1503,32 +1529,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "wasm_test_server"
-version = "0.1.0"
-dependencies = [
- "cfg-if",
- "eyre",
- "fake",
- "form_urlencoded",
- "gloo-net",
- "http-body-util",
- "hyper 1.1.0",
- "hyper-util",
- "reqwest",
- "serde",
- "serde_derive",
- "serde_json",
- "thiserror",
- "tokio",
- "tower",
- "tower-http",
- "tracing",
- "tracing-subscriber",
- "uuid7",
- "wasm-bindgen-test",
 ]
 
 [[package]]

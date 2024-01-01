@@ -11,7 +11,7 @@ use reqwest::header::HeaderValue;
 use std::{convert::Infallible, net::SocketAddr};
 use tokio::net::TcpListener;
 
-use wasm_test_server::server::{bind_socket, Mode};
+use pulcinella::server::{bind_socket, Mode};
 
 use crate::helpers::start_server;
 

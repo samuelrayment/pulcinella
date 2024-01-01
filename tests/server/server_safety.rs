@@ -1,5 +1,5 @@
 use reqwest::Method;
-use wasm_test_server::server::Mode;
+use pulcinella::server::Mode;
 
 use crate::helpers::{start_server, ServerPorts};
 

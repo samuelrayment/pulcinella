@@ -3,7 +3,7 @@ use std::net::SocketAddr;
 use tokio::join;
 use tracing::{info, level_filters::LevelFilter, Level};
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
-use wasm_test_server::server::{bind_socket, run_controlplane, run_mock, Mode, SequentialState};
+use pulcinella::server::{bind_socket, run_controlplane, run_mock, Mode, SequentialState};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
