@@ -1,5 +1,3 @@
-use thiserror::Error;
-
 use crate::interchange::{
     Command, InstallError, InstallResponse, InstanceId, InstanceResponse, WhenRules,
 };
@@ -44,16 +42,6 @@ impl Client {
     }
 }
 
-#[derive(Error, Debug, PartialEq)]
-pub enum ClientNetworkError<E> {
-    #[error("Failed to deserialize response")]
-    ResponseDeserializeError,
-    #[error("Response")]
-    Response(E),
-    #[error("Failed to start mock client")]
-    FailedToConnectToMockServer,
-}
-
 impl MockClient for Client {
     async fn send_command(&self, command: Command) -> Result<(), ClientError> {
         NetworkClient::send::<Command, InstallResponse, InstallError>(&self.control_plane_url, &command)
@@ -87,8 +75,7 @@ impl NetworkClient {
             .send()
             .await
             .map_err(|_| ClientNetworkError::FailedToConnectToMockServer)?;
-        let status = response.status();
-        if status.is_success() {
+        if response.status().is_success() {
             return response
                 .json::<U>()
                 .await
@@ -101,5 +88,4 @@ impl NetworkClient {
                 .and_then(|e| Err(ClientNetworkError::Response(e)));
         }
     }
-
 }
