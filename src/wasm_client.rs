@@ -12,7 +12,7 @@ pub struct Client {
 impl Client {
     pub async fn new(control_plane_url: &str) -> Result<Self, ClientError> {
         let body = NetworkClient::send::<Command, InstanceResponse, InstanceResponse>(
-            &control_plane_url,
+            control_plane_url,
             &Command::CreateInstance,
         )
         .await;

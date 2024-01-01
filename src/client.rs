@@ -12,7 +12,7 @@ pub struct Client {
 impl Client {
     pub async fn new(control_plane_url: &str) -> Result<Self, ClientError> {
         let body = NetworkClient::send::<Command, InstanceResponse, InstanceResponse>(
-            &control_plane_url,
+            control_plane_url,
             &Command::CreateInstance,
         )
         .await;
@@ -76,16 +76,16 @@ impl NetworkClient {
             .await
             .map_err(|_| ClientNetworkError::FailedToConnectToMockServer)?;
         if response.status().is_success() {
-            return response
+            response
                 .json::<U>()
                 .await
-                .map_err(|_| ClientNetworkError::ResponseDeserializeError);
+                .map_err(|_| ClientNetworkError::ResponseDeserializeError)
         } else {
-            return response
+            response
                 .json::<E>()
                 .await
                 .map_err(|_| ClientNetworkError::ResponseDeserializeError)
-                .and_then(|e| Err(ClientNetworkError::Response(e)));
+                .and_then(|e| Err(ClientNetworkError::Response(e)))
         }
     }
 }

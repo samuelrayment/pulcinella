@@ -1,6 +1,8 @@
 use std::{collections::HashMap, convert::Infallible, net::SocketAddr, sync::Arc};
 
-use crate::interchange::{Command, InstallError, InstanceId, InstanceResponse, Method, MockRule, InstallResponse};
+use crate::interchange::{
+    Command, InstallError, InstallResponse, InstanceId, InstanceResponse, Method, MockRule,
+};
 use eyre::{eyre, WrapErr};
 use http_body_util::{BodyExt, Full};
 use hyper::{
@@ -349,30 +351,31 @@ trait RequestMatch {
 impl RequestMatch for MockRule {
     fn matches(&self, req: &UnpackedRequest) -> bool {
         let params_match = self.check_params_match(req);
-        let method_match = self.when.method.as_ref().map(|m| Self::method_match(m, &req.method)).unwrap_or(true);
+        let method_match = self
+            .when
+            .method
+            .as_ref()
+            .map(|m| Self::method_match(m, &req.method))
+            .unwrap_or(true);
         let path_match = self.when.match_path == req.uri.path();
 
         path_match && params_match && method_match
     }
 
     fn priority(&self) -> u8 {
-        let form_data = if self.when.form_data.is_empty() {
-            0
-        } else {
-            1
-        };
+        let form_data = if self.when.form_data.is_empty() { 0 } else { 1 };
         let method = if self.when.method.is_some() { 1 } else { 0 };
         form_data + method
     }
 
     fn method_match(method: &Method, req_method: &hyper::Method) -> bool {
-        match (method, req_method) {
-            (Method::GET, &hyper::Method::GET) => true,
-            (Method::POST, &hyper::Method::POST) => true,
-            (Method::PUT, &hyper::Method::PUT) => true,
-            (Method::DELETE, &hyper::Method::DELETE) => true,
-            _ => false,
-        }
+        matches!(
+            (method, req_method),
+            (Method::GET, &hyper::Method::GET)
+                | (Method::POST, &hyper::Method::POST)
+                | (Method::PUT, &hyper::Method::PUT)
+                | (Method::DELETE, &hyper::Method::DELETE)
+        )
     }
 }
 
