@@ -33,6 +33,7 @@ pub struct MockRule {
 pub struct WhenRules {
     pub match_path: String,
     pub form_data: Vec<(String, String)>,
+    pub method: Option<Method>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -40,4 +41,12 @@ pub struct ThenState {
     pub status: u16,
     pub headers: Vec<(String, String)>,
     pub body: Vec<u8>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum Method {
+    GET,
+    POST,
+    DELETE,
+    PUT,
 }

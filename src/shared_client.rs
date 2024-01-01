@@ -3,14 +3,11 @@ use std::future::Future;
 use thiserror::Error;
 
 use crate::interchange::{Command, InstanceId, MockRule, ThenState, WhenRules};
+pub use crate::interchange::Method;
 
 pub trait MockClient {
     fn send_command(&self, command: Command) -> impl Future<Output = Result<(), ClientError>>;
     fn instance(&self) -> &InstanceId;
-}
-
-pub enum Method {
-    GET,
 }
 
 pub struct MockBuilder<'a, State, C: MockClient> {
@@ -55,6 +52,7 @@ impl<'a, C: MockClient> MockBuilder<'a, WhenThenState, C> {
 
 #[derive(Default)]
 pub struct WhenBuilder {
+    method: Option<Method>,
     match_path: String,
     form_data: Vec<(String, String)>,
 }
@@ -71,10 +69,16 @@ impl WhenBuilder {
         self
     }
 
+    pub fn method(mut self, method: Method) -> Self {
+        self.method = Some(method);
+        self
+    }
+
     pub(crate) fn build(self) -> WhenRules {
         WhenRules {
             match_path: self.match_path,
             form_data: self.form_data,
+            method: self.method,
         }
     }
 }

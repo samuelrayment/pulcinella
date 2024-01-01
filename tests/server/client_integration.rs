@@ -1,7 +1,7 @@
 use fake::{Fake, Faker};
 
 use pulcinella::{
-    client::{Client, ClientError},
+    client::{Client, ClientError, Method},
     server::Mode,
 };
 
@@ -135,12 +135,7 @@ async fn should_respond_with_404_for_matched_path_and_unmatched_form_data() {
 }
 
 #[tokio::test]
-async fn should_respond_with_200_for_matched_path_and_matched_form_data() {
-    let form_name: String = Faker.fake();
-    let form_name2: String = Faker.fake();
-    let form_value: String = Faker.fake();
-    let form_value2: String = Faker.fake();
-
+async fn should_respond_with_404_for_unmatched_method() {
     let server_path = format!("/{}", Faker.fake::<String>());
     let Dsl {
         control: mock_client,
@@ -151,22 +146,21 @@ async fn should_respond_with_200_for_matched_path_and_matched_form_data() {
     mock_client
         .when(|when| {
             when.path(&server_path)
-                .form_data(&form_name, &form_value)
-                .form_data(&form_name2, &form_value2)
+                .method(Method::DELETE)
         })
         .then(|then| then.status(200))
         .send()
         .await
         .expect("Failed to install mock");
     let client = client
-        .post(&format!("{}{}", mock_client.url(), server_path))
-        .form(&[(form_name, form_value), (form_name2, form_value2)])
+        .get(&format!("{}{}", mock_client.url(), server_path))
         .send()
         .await
         .expect("Failed to send request");
 
-    assert_eq!(client.status(), 200);
+    assert_eq!(client.status(), 404);
 }
+
 
 #[tokio::test]
 async fn should_respond_with_the_most_specific_mock() {

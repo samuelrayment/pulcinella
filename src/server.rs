@@ -1,6 +1,6 @@
 use std::{collections::HashMap, convert::Infallible, net::SocketAddr, sync::Arc};
 
-use crate::interchange::{Command, InstallError, InstanceId, InstanceResponse, MockRule};
+use crate::interchange::{Command, InstallError, InstanceId, InstanceResponse, Method, MockRule};
 use eyre::{eyre, WrapErr};
 use http_body_util::{BodyExt, Full};
 use hyper::{
@@ -343,20 +343,35 @@ pub enum Mode {
 trait RequestMatch {
     fn matches(&self, req: &UnpackedRequest) -> bool;
     fn priority(&self) -> u8;
+    fn method_match(method: &Method, req_method: &hyper::Method) -> bool;
 }
 
 impl RequestMatch for MockRule {
     fn matches(&self, req: &UnpackedRequest) -> bool {
         let params_match = self.check_params_match(req);
+        let method_match = self.when.method.as_ref().map(|m| Self::method_match(m, &req.method)).unwrap_or(true);
+        let path_match = self.when.match_path == req.uri.path();
 
-        self.when.match_path == req.uri.path() && params_match
+        path_match && params_match && method_match
     }
 
     fn priority(&self) -> u8 {
-        if !self.when.form_data.is_empty() {
-            1
-        } else {
+        let form_data = if self.when.form_data.is_empty() {
             0
+        } else {
+            1
+        };
+        let method = if self.when.method.is_some() { 1 } else { 0 };
+        form_data + method
+    }
+
+    fn method_match(method: &Method, req_method: &hyper::Method) -> bool {
+        match (method, req_method) {
+            (Method::GET, &hyper::Method::GET) => true,
+            (Method::POST, &hyper::Method::POST) => true,
+            (Method::PUT, &hyper::Method::PUT) => true,
+            (Method::DELETE, &hyper::Method::DELETE) => true,
+            _ => false,
         }
     }
 }
