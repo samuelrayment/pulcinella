@@ -13,7 +13,7 @@ pub struct Client {
 
 impl Client {
     pub async fn new(control_plane_url: &str) -> Result<Self, ClientError> {
-        let body = Self::send::<Command, InstanceResponse, InstanceResponse>(
+        let body = NetworkClient::send::<Command, InstanceResponse, InstanceResponse>(
             &control_plane_url,
             &Command::CreateInstance,
         )
@@ -42,7 +42,39 @@ impl Client {
     pub fn url(&self) -> String {
         self.mock_url.clone()
     }
+}
 
+#[derive(Error, Debug, PartialEq)]
+pub enum ClientNetworkError<E> {
+    #[error("Failed to deserialize response")]
+    ResponseDeserializeError,
+    #[error("Response")]
+    Response(E),
+    #[error("Failed to start mock client")]
+    FailedToConnectToMockServer,
+}
+
+impl MockClient for Client {
+    async fn send_command(&self, command: Command) -> Result<(), ClientError> {
+        NetworkClient::send::<Command, InstallResponse, InstallError>(&self.control_plane_url, &command)
+            .await
+            .map(|_| ())
+            .map_err(|e| match e {
+                ClientNetworkError::Response(InstallError::InstanceNotFound) => {
+                    ClientError::InstanceNoLongerValid
+                }
+                _ => ClientError::FailedToConnectToMockServer,
+            })
+    }
+
+    fn instance(&self) -> &InstanceId {
+        &self.instance
+    }
+}
+
+struct NetworkClient;
+
+impl NetworkClient {
     async fn send<T, U, E>(control_plane_url: &str, message: &T) -> Result<U, ClientNetworkError<E>>
     where
         T: serde::Serialize,
@@ -69,32 +101,5 @@ impl Client {
                 .and_then(|e| Err(ClientNetworkError::Response(e)));
         }
     }
-}
 
-#[derive(Error, Debug, PartialEq)]
-pub enum ClientNetworkError<E> {
-    #[error("Failed to deserialize response")]
-    ResponseDeserializeError,
-    #[error("Response")]
-    Response(E),
-    #[error("Failed to start mock client")]
-    FailedToConnectToMockServer,
-}
-
-impl MockClient for Client {
-    async fn send_command(&self, command: Command) -> Result<(), ClientError> {
-        Self::send::<Command, InstallResponse, InstallError>(&self.control_plane_url, &command)
-            .await
-            .map(|_| ())
-            .map_err(|e| match e {
-                ClientNetworkError::Response(InstallError::InstanceNotFound) => {
-                    ClientError::InstanceNoLongerValid
-                }
-                _ => ClientError::FailedToConnectToMockServer,
-            })
-    }
-
-    fn instance(&self) -> &InstanceId {
-        &self.instance
-    }
 }
