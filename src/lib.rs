@@ -5,3 +5,5 @@ pub mod server;
 pub mod client;
 #[cfg(feature = "client")]
 pub(crate) mod network_client;
+#[cfg(not(target_arch = "wasm32"))]
+mod hyper_helpers;

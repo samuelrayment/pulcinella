@@ -1,8 +1,8 @@
 use std::{collections::HashMap, convert::Infallible, net::SocketAddr, sync::Arc};
 
-use crate::interchange::{
+use crate::{interchange::{
     Command, InstallError, InstallResponse, InstanceId, InstanceResponse, Method, MockRule,
-};
+}, hyper_helpers::ResponseExt};
 use eyre::{eyre, WrapErr};
 use http_body_util::{BodyExt, Full};
 use hyper::{
@@ -13,7 +13,7 @@ use hyper::{
 use hyper_util::{rt::TokioIo, service::TowerToHyperService};
 use thiserror::Error;
 use tokio::{
-    net::{TcpListener, TcpStream},
+    net::TcpListener,
     sync::RwLock,
 };
 use tower::ServiceBuilder;
@@ -94,22 +94,6 @@ async fn request_from_proxy(
     let host = url.host().ok_or(ProxyError::BadHostHeader)?;
     let port = url.port_u16().unwrap_or(80);
     let address = format!("{}:{}", host, port);
-
-    let stream = TcpStream::connect(address)
-        .await
-        .map_err(|_| ProxyError::UpstreamNotFound)?;
-    let io = TokioIo::new(stream);
-    let (mut sender, conn) = hyper::client::conn::http1::handshake(io)
-        .await
-        .map_err(|_| ProxyError::UpstreamNotHttp)?;
-
-    // Spawn a task to poll the connection, driving the HTTP state
-    tokio::task::spawn(async move {
-        if let Err(err) = conn.await {
-            println!("Connection failed: {:?}", err);
-        }
-    });
-
     let mut builder = Request::builder().method(req.method).uri(req.uri.path());
 
     if let Some(headers) = builder.headers_mut() {
@@ -119,11 +103,18 @@ async fn request_from_proxy(
         .body(Full::new(req.body))
         .map_err(|_| ProxyError::CannotReadRequestBody)?;
 
-    let res = sender
-        .send_request(proxied_req)
-        .await
-        .map_err(|_| ProxyError::UpstreamSendError)?;
-    Ok(res)
+    let response = crate::hyper_helpers::HyperHelpers::send(&address, proxied_req)
+       .await
+       .map_err(|err| {
+           use crate::hyper_helpers::RequestError::*;
+           match err {
+               UpstreamNotHttp => ProxyError::UpstreamNotHttp,
+               UpstreamSendError => ProxyError::UpstreamSendError,
+               CannotConnect => ProxyError::UpstreamNotFound,
+           }
+       })?;
+
+    Ok(response)
 }
 
 #[derive(Debug, Error)]
@@ -165,12 +156,7 @@ async fn proxy_response_to_response(
 ) -> Result<Response<Full<Bytes>>, ProxyError> {
     let res_status = res.status();
     let res_headers = res.headers().clone();
-    let bytes = res
-        .into_body()
-        .collect()
-        .await
-        .map_err(|_| ProxyError::CannotReadResponseBody)?
-        .to_bytes();
+    let bytes = res.bytes().await.map_err(|_| ProxyError::CannotReadResponseBody)?;
 
     let mut builder = Response::builder().status(res_status);
     if let Some(headers_map) = builder.headers_mut() {
