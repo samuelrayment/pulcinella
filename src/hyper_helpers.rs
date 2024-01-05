@@ -1,11 +1,15 @@
-use std::{error::Error, net::TcpStream};
+use std::error::Error;
 
+use async_trait::async_trait;
+use http_body_util::BodyExt;
 use hyper::{
-    body::{Body, Incoming, Bytes},
+    body::{Body, Bytes, Incoming},
     Request, Response,
 };
 use hyper_util::rt::TokioIo;
-use eyre::WrapErr;
+use serde::de::DeserializeOwned;
+use thiserror::Error;
+use tokio::net::TcpStream;
 pub struct HyperHelpers;
 
 impl HyperHelpers {
@@ -40,25 +44,50 @@ impl HyperHelpers {
     }
 }
 
+#[derive(Error, Debug, PartialEq)]
 pub enum RequestError {
+    #[error("Upstream is not HTTP")]
     UpstreamNotHttp,
+    #[error("Cannot send request to upstream")]
     UpstreamSendError,
+    #[error("Cannot connect to upstream")]
     CannotConnect,
 }
 
-pub trait ResponseExt {
-    async fn bytes(self) -> Result<Bytes, eyre::Error>;
-    //fn json<T>(self) -> Result<T, dyn serde::de::Error> where T: DeserializeOwned;
+#[derive(Error, Debug, PartialEq)]
+pub enum ResponseError {
+    #[error("Cannot fetch body")]
+    CannotFetchBody,
+    #[error("Cannot deserialize body")]
+    DeserializeError,
 }
 
-impl ResponseExt for Response<Incoming> {
-    async fn bytes(self) -> Result<Bytes, eyre::Error> {
-            let bytes = self
-                .into_body()
-                .collect()
-                .await
-            .wrap_err("")
-                .to_bytes();
+#[async_trait]
+pub trait ResponseExt {
+    async fn bytes(self) -> Result<Bytes, ResponseError>;
+    async fn json<T>(self) -> Result<T, ResponseError>
+    where
+        T: DeserializeOwned;
+}
 
+#[async_trait]
+impl ResponseExt for Response<Incoming> {
+    async fn bytes(self) -> Result<Bytes, ResponseError> {
+        let bytes = self
+            .into_body()
+            .collect()
+            .await
+            .map_err(|_| ResponseError::CannotFetchBody)?
+            .to_bytes();
+        Ok(bytes)
+    }
+
+    async fn json<T>(self) -> Result<T, ResponseError>
+    where
+        T: DeserializeOwned,
+    {
+        let bytes = self.bytes().await?;
+        let json = serde_json::from_slice(&bytes).map_err(|_| ResponseError::DeserializeError)?;
+        Ok(json)
     }
 }

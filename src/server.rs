@@ -1,8 +1,8 @@
 use std::{collections::HashMap, convert::Infallible, net::SocketAddr, sync::Arc};
 
-use crate::interchange::{
+use crate::{interchange::{
     Command, InstallError, InstallResponse, InstanceId, InstanceResponse, Method, MockRule,
-};
+}, hyper_helpers::ResponseExt};
 use eyre::{eyre, WrapErr};
 use http_body_util::{BodyExt, Full};
 use hyper::{
@@ -13,7 +13,7 @@ use hyper::{
 use hyper_util::{rt::TokioIo, service::TowerToHyperService};
 use thiserror::Error;
 use tokio::{
-    net::{TcpListener, TcpStream},
+    net::TcpListener,
     sync::RwLock,
 };
 use tower::ServiceBuilder;
@@ -156,12 +156,7 @@ async fn proxy_response_to_response(
 ) -> Result<Response<Full<Bytes>>, ProxyError> {
     let res_status = res.status();
     let res_headers = res.headers().clone();
-    let bytes = res
-        .into_body()
-        .collect()
-        .await
-        .map_err(|_| ProxyError::CannotReadResponseBody)?
-        .to_bytes();
+    let bytes = res.bytes().await.map_err(|_| ProxyError::CannotReadResponseBody)?;
 
     let mut builder = Response::builder().status(res_status);
     if let Some(headers_map) = builder.headers_mut() {
