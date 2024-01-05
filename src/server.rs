@@ -111,6 +111,7 @@ async fn request_from_proxy(
                UpstreamNotHttp => ProxyError::UpstreamNotHttp,
                UpstreamSendError => ProxyError::UpstreamSendError,
                CannotConnect => ProxyError::UpstreamNotFound,
+               CannotSerializeBody => ProxyError::UpstreamSendError,
            }
        })?;
 
