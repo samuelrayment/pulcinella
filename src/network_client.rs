@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::hyper_helpers::{HyperHelpers, ResponseExt};
+use crate::hyper_helpers::{HyperHelpers, ResponseExt, RequestExt};
 
 pub struct NetworkClient;
 
@@ -15,8 +15,6 @@ impl NetworkClient {
         U: serde::de::DeserializeOwned,
         E: serde::de::DeserializeOwned,
     {
-        use hyper::body::Bytes;
-
         // TODO perhaps some form of bad address network error
         let url = control_plane_url
             .parse::<hyper::Uri>()
@@ -31,17 +29,15 @@ impl NetworkClient {
             .method(hyper::Method::POST)
             .uri(url.path())
             .header("content-type", "application/json")
-            .body(http_body_util::Full::new(Bytes::from(
-                serde_json::to_string(message).unwrap(),
-            )))
-            .unwrap();
+            .json(message)
+            .map_err(|_| ClientNetworkError::FailedBuildRequest)?;
+
 
         let response = HyperHelpers::send(&address, request)
             .await
             .map_err(|_| ClientNetworkError::FailedToConnectToMockServer)?;
 
-        let status = response.status();
-        if status.is_success() {
+        if response.status().is_success() {
             response
                 .json::<U>()
                 .await
@@ -98,4 +94,6 @@ pub enum ClientNetworkError<E> {
     FailedToConnectToMockServer,
     #[error("Failed to serialize command")]
     FailedToSerializeCommand,
+    #[error("Failed to build request")]
+    FailedBuildRequest,
 }

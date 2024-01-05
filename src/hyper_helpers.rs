@@ -1,7 +1,7 @@
 use std::error::Error;
 
 use async_trait::async_trait;
-use http_body_util::BodyExt;
+use http_body_util::{BodyExt, Full};
 use hyper::{
     body::{Body, Bytes, Incoming},
     Request, Response,
@@ -52,6 +52,8 @@ pub enum RequestError {
     UpstreamSendError,
     #[error("Cannot connect to upstream")]
     CannotConnect,
+    #[error("Cannot serialize body")]
+    CannotSerializeBody,
 }
 
 #[derive(Error, Debug, PartialEq)]
@@ -60,6 +62,26 @@ pub enum ResponseError {
     CannotFetchBody,
     #[error("Cannot deserialize body")]
     DeserializeError,
+}
+
+pub trait RequestExt {
+    fn json<T>(self, body: T) -> Result<Request<Full<Bytes>>, RequestError>
+    where
+        T: serde::Serialize;
+}
+
+impl RequestExt for hyper::http::request::Builder {
+    fn json<T>(self, body: T) -> Result<Request<Full<Bytes>>, RequestError>
+    where
+        T: serde::Serialize,
+    {
+        let message =
+            serde_json::to_string(&body).map_err(|_| RequestError::CannotSerializeBody)?;
+
+        self.header("content-type", "application/json")
+            .body(Full::new(Bytes::from(message)))
+            .map_err(|_| RequestError::UpstreamSendError)
+    }
 }
 
 #[async_trait]
