@@ -37,10 +37,10 @@ impl HyperHelpers {
             }
         });
 
-        Ok(sender
+        sender
             .send_request(request)
             .await
-            .map_err(|_| RequestError::UpstreamSendError)?)
+            .map_err(|_| RequestError::UpstreamSendError)
     }
 }
 
