@@ -1,7 +1,4 @@
 use thiserror::Error;
-
-use crate::hyper_helpers::{HyperHelpers, ResponseExt, RequestExt};
-
 pub struct NetworkClient;
 
 #[cfg(all(feature = "client", not(target_arch = "wasm32")))]
@@ -15,6 +12,7 @@ impl NetworkClient {
         U: serde::de::DeserializeOwned,
         E: serde::de::DeserializeOwned,
     {
+        use crate::hyper_helpers::{HyperHelpers, ResponseExt, RequestExt};
         // TODO perhaps some form of bad address network error
         let url = control_plane_url
             .parse::<hyper::Uri>()
