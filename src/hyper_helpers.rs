@@ -14,7 +14,7 @@ pub struct HyperHelpers;
 
 impl HyperHelpers {
     pub async fn send<B>(
-        address: &str,
+        address: &Address,
         request: Request<B>,
     ) -> Result<Response<Incoming>, RequestError>
     where
@@ -22,7 +22,7 @@ impl HyperHelpers {
         B::Data: Send,
         B::Error: Into<Box<dyn Error + Send + Sync>>,
     {
-        let stream = TcpStream::connect(address)
+        let stream = TcpStream::connect(&address.address)
             .await
             .map_err(|_| RequestError::CannotConnect)?;
         let io = TokioIo::new(stream);
@@ -41,6 +41,27 @@ impl HyperHelpers {
             .send_request(request)
             .await
             .map_err(|_| RequestError::UpstreamSendError)
+    }
+
+    pub fn parse_address(url: &str) -> Result<Address, RequestError> {
+        // TODO perhaps some form of bad address network error
+        let parsed_uri = url
+            .parse::<hyper::Uri>()
+            .map_err(|_| RequestError::CannotConnect)?;
+        let host = parsed_uri
+            .host()
+            .ok_or(RequestError::CannotConnect)?;
+        let port = parsed_uri.port_u16().unwrap_or(80);
+        let address = Address{address: format!("{}:{}", host, port), uri: parsed_uri};
+        Ok(address)
+    }
+}
+
+pub struct Address{ address: String, uri: hyper::Uri }
+
+impl Address {
+    pub fn path(&self) -> &str {
+        self.uri.path()
     }
 }
 

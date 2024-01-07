@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::hyper_helpers::{HyperHelpers, ResponseExt, RequestExt};
+use crate::hyper_helpers::{HyperHelpers, RequestExt, ResponseExt};
 
 pub struct NetworkClient;
 
@@ -15,23 +15,15 @@ impl NetworkClient {
         U: serde::de::DeserializeOwned,
         E: serde::de::DeserializeOwned,
     {
-        // TODO perhaps some form of bad address network error
-        let url = control_plane_url
-            .parse::<hyper::Uri>()
+        let address = HyperHelpers::parse_address(control_plane_url)
             .map_err(|_| ClientNetworkError::FailedToConnectToMockServer)?;
-        let host = url
-            .host()
-            .ok_or(ClientNetworkError::FailedToConnectToMockServer)?;
-        let port = url.port_u16().unwrap_or(80);
-        let address = format!("{}:{}", host, port);
 
         let request = hyper::Request::builder()
             .method(hyper::Method::POST)
-            .uri(url.path())
+            .uri(address.path())
             .header("content-type", "application/json")
             .json(message)
             .map_err(|_| ClientNetworkError::FailedBuildRequest)?;
-
 
         let response = HyperHelpers::send(&address, request)
             .await
@@ -47,7 +39,8 @@ impl NetworkClient {
                 .json::<E>()
                 .await
                 .map_err(|_| ClientNetworkError::ResponseDeserializeError)
-                .and_then(|e| Err(ClientNetworkError::Response(e)))        }
+                .and_then(|e| Err(ClientNetworkError::Response(e)))
+        }
     }
 }
 
