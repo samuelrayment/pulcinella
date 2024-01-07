@@ -1,8 +1,11 @@
 use std::{collections::HashMap, convert::Infallible, net::SocketAddr, sync::Arc};
 
-use crate::{interchange::{
-    Command, InstallError, InstallResponse, InstanceId, InstanceResponse, Method, MockRule,
-}, hyper_helpers::ResponseExt};
+use crate::{
+    hyper_helpers::ResponseExt,
+    interchange::{
+        Command, InstallError, InstallResponse, InstanceId, InstanceResponse, Method, MockRule,
+    },
+};
 use eyre::{eyre, WrapErr};
 use http_body_util::{BodyExt, Full};
 use hyper::{
@@ -12,10 +15,7 @@ use hyper::{
 };
 use hyper_util::{rt::TokioIo, service::TowerToHyperService};
 use thiserror::Error;
-use tokio::{
-    net::TcpListener,
-    sync::RwLock,
-};
+use tokio::{net::TcpListener, sync::RwLock};
 use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
 use tracing::{info, trace};
@@ -104,16 +104,16 @@ async fn request_from_proxy(
         .map_err(|_| ProxyError::CannotReadRequestBody)?;
 
     let response = crate::hyper_helpers::HyperHelpers::send(&address, proxied_req)
-       .await
-       .map_err(|err| {
-           use crate::hyper_helpers::RequestError::*;
-           match err {
-               UpstreamNotHttp => ProxyError::UpstreamNotHttp,
-               UpstreamSendError => ProxyError::UpstreamSendError,
-               CannotConnect => ProxyError::UpstreamNotFound,
-               CannotSerializeBody => ProxyError::UpstreamSendError,
-           }
-       })?;
+        .await
+        .map_err(|err| {
+            use crate::hyper_helpers::RequestError::*;
+            match err {
+                UpstreamNotHttp => ProxyError::UpstreamNotHttp,
+                UpstreamSendError => ProxyError::UpstreamSendError,
+                CannotConnect => ProxyError::UpstreamNotFound,
+                CannotSerializeBody => ProxyError::UpstreamSendError,
+            }
+        })?;
 
     Ok(response)
 }
@@ -157,7 +157,10 @@ async fn proxy_response_to_response(
 ) -> Result<Response<Full<Bytes>>, ProxyError> {
     let res_status = res.status();
     let res_headers = res.headers().clone();
-    let bytes = res.bytes().await.map_err(|_| ProxyError::CannotReadResponseBody)?;
+    let bytes = res
+        .bytes()
+        .await
+        .map_err(|_| ProxyError::CannotReadResponseBody)?;
 
     let mut builder = Response::builder().status(res_status);
     if let Some(headers_map) = builder.headers_mut() {
@@ -337,6 +340,7 @@ trait RequestMatch {
 
 impl RequestMatch for MockRule {
     fn matches(&self, req: &UnpackedRequest) -> bool {
+        trace!(?req, "Checking if request matches");
         let params_match = self.check_params_match(req);
         let method_match = self
             .when
@@ -345,7 +349,6 @@ impl RequestMatch for MockRule {
             .map(|m| Self::method_match(m, &req.method))
             .unwrap_or(true);
         let path_match = self.when.match_path == req.uri.path();
-
         path_match && params_match && method_match
     }
 
